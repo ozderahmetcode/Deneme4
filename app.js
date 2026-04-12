@@ -11,7 +11,7 @@ const fallbackRadios = {
     'radio_capital': { name: '📻 Capital FM', stream: 'https://ice-sov.musicradio.com/CapitalMP3' }
 };
 
-let currentRoomsData = {}; 
+let currentRoomsData = {};
 let globalSocket = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -66,6 +66,36 @@ document.addEventListener('DOMContentLoaded', () => {
         updateProfileUI();
     }
 
+    function updateProfileUI() {
+        if (!currentUser) return;
+        const uText = document.getElementById('profile-username-text');
+        const bioText = document.getElementById('profile-bio-text');
+        const xpText = document.getElementById('user-xp');
+        const progressFill = document.getElementById('xp-fill');
+        const avatarImg = document.getElementById('user-avatar-img');
+
+        if (uText) uText.innerText = currentUser.username;
+        if (bioText) {
+            const age = currentUser.age || 'Gizli';
+            const ht = currentUser.height ? currentUser.height + 'cm' : 'Gizli';
+            const wt = currentUser.weight ? currentUser.weight + 'kg' : 'Gizli';
+            bioText.innerHTML = `Yaş: ${age} | Boy: ${ht} | Kilo: ${wt}<br>${currentUser.bio || 'Henüz bir bio eklenmemiş...'}`;
+        }
+
+        if (avatarImg) {
+            avatarImg.src = currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
+        }
+
+        // Level System
+        const currentXP = currentUser.xp || 0;
+        const level = Math.floor(currentXP / 1000) + 1;
+        const xpInLevel = currentXP % 1000;
+
+        if (document.getElementById('user-level')) document.getElementById('user-level').innerText = level;
+        if (xpText) xpText.innerText = xpInLevel;
+        if (progressFill) progressFill.style.width = `${(xpInLevel / 1000) * 100}%`;
+    }
+
     window.addXP = function (amt) {
         currentUser.xp = (currentUser.xp || 0) + amt;
         saveUser();
@@ -78,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = '';
 
         const validHistory = (currentUser.history || []).filter(h => h.name && h.name !== 'Anonim');
-        
+
         if (validHistory.length === 0) {
             container.style.display = 'none';
             return;
@@ -296,12 +326,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let matchingInterval, activeTimerInterval, globalTimeLeft = 0, currentCallStart = 0;
     let opponentName = "Anonim";
     let webrtcClient = null;
+    let roomClient = null; // Mesh Room Audio
     let lastMatchData = null;
     let matchGenderPref = 'opposite'; // 'opposite' or 'mixed'
     let matchRegionFilter = false;
 
     // Match filter functions
-    window.setMatchPref = function(pref) {
+    window.setMatchPref = function (pref) {
         matchGenderPref = pref;
         document.getElementById('filter-opposite').classList.toggle('active', pref === 'opposite');
         document.getElementById('filter-mixed').classList.toggle('active', pref === 'mixed');
@@ -316,7 +347,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.io) {
         const srvUrl = (window.location.protocol === 'file:') ? 'http://localhost:3000' : window.location.origin;
         globalSocket = io(srvUrl, { transports: ['websocket', 'polling'], reconnection: true });
-        
+
+        // Initialize Room Voice Client Placeholder
+        roomClient = null;
+
+
 
         // Mesaj Alma (Soket üzerinden)
         globalSocket.on('receive_message', (data) => {
@@ -361,38 +396,42 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- PARTICIPANTS LOGIC ---
         let activeRoomParticipants = [];
 
-        globalSocket.on('room_participants', (participants) => {
-            activeRoomParticipants = participants;
-            updateParticipantsUI();
-        });
 
-        globalSocket.on('room_user_joined', (user) => {
-            activeRoomParticipants.push(user);
-            updateParticipantsUI();
-        });
-
-        globalSocket.on('room_user_left', (data) => {
-            activeRoomParticipants = activeRoomParticipants.filter(p => p.id !== data.id);
-            updateParticipantsUI();
-        });
 
         window.updateParticipantsUI = function () {
             const countEl = document.getElementById('room-users-count');
-            const container = document.getElementById('participants-container');
+            const listContainer = document.getElementById('participants-container');
+            const gridContainer = document.getElementById('room-participants-grid');
+
             if (countEl) countEl.innerText = activeRoomParticipants.length;
-            
-            if (container) {
-                container.innerHTML = '';
+
+            // Update Side List (Standard)
+            if (listContainer) {
+                listContainer.innerHTML = '';
                 if (activeRoomParticipants.length === 0) {
-                    container.innerHTML = '<div style="padding:10px; font-size:0.7rem; color:#aaa; text-align:center;">Kimse yok.</div>';
-                    return;
+                    listContainer.innerHTML = '<div style="padding:10px; font-size:0.7rem; color:#aaa; text-align:center;">Kimse yok.</div>';
+                } else {
+                    activeRoomParticipants.forEach(p => {
+                        const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
+                        listContainer.innerHTML += `
+                            <div class="participant-item">
+                                <img src="${avatar}">
+                                <span>${p.username} ${p.id === globalSocket.id ? '(Sen)' : ''}</span>
+                            </div>
+                        `;
+                    });
                 }
+            }
+
+            // Update Grid Layer (Premium)
+            if (gridContainer) {
+                gridContainer.innerHTML = '';
                 activeRoomParticipants.forEach(p => {
                     const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
-                    container.innerHTML += `
-                        <div class="participant-item">
-                            <img src="${avatar}">
-                            <span>${p.username} ${p.id === globalSocket.id ? '(Sen)' : ''}</span>
+                    gridContainer.innerHTML += `
+                        <div style="text-align:center;">
+                            <img src="${avatar}" style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'};">
+                            <div style="font-size:0.6rem; color:white; margin-top:5px; max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.username}</div>
                         </div>
                     `;
                 });
@@ -428,7 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
         globalSocket.on('receive_rooms_info', (data) => {
             currentRoomsData = data;
             // Odaların yanındaki toplam sayıları da güncelle
-            for(const rId in data) {
+            for (const rId in data) {
                 const countEl = document.getElementById(`room-count-${rId}`);
                 if (countEl) countEl.innerText = data[rId].userCount;
             }
@@ -436,7 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const radioList = document.getElementById('radio-rooms-list');
             const vipList = document.getElementById('vip-rooms-list');
             const normalList = document.getElementById('normal-rooms-list');
-            
+
             if (!radioList || !vipList || !normalList) return;
 
             radioList.innerHTML = '';
@@ -456,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const card = document.createElement('div');
                 card.className = "room-card";
                 card.setAttribute('data-name', room.name.toLowerCase());
-                
+
                 if (room.vip) card.style.borderLeft = "4px solid var(--gold)";
                 else if (room.radio) card.style.borderLeft = "4px solid var(--primary)";
 
@@ -630,7 +669,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Bağlantı Onaylandı! Harika gidiyorsun.");
             // Burada sunucuya 'onay' bilgisi gidip süre durdurulabilir orjinal BlindID gibi
         });
-    }
+
 
     document.getElementById('start-call-btn')?.addEventListener('click', async () => {
         try {
@@ -853,7 +892,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.saveProfileChanges = function () {
         if (!currentUser) return;
-        
+
         const newUsername = document.getElementById('edit-username').value.trim();
         const bio = document.getElementById('edit-bio').value;
         const age = document.getElementById('edit-age').value;
@@ -925,8 +964,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const heightText = document.getElementById('profile-height-text');
         const weightText = document.getElementById('profile-weight-text');
         const regionText = document.getElementById('profile-region-text');
-        const xpText = document.getElementById('user-xp');
-        const progressFill = document.getElementById('xp-fill');
         const avatarImg = document.getElementById('user-avatar-img');
 
         if (uText) uText.innerText = currentUser.username;
@@ -942,15 +979,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
             };
         }
-
-        // Level System
-        const currentXP = currentUser.xp || 0;
-        const level = Math.floor(currentXP / 1000) + 1;
-        const xpInLevel = currentXP % 1000;
-
-        if (document.getElementById('user-level')) document.getElementById('user-level').innerText = level;
-        if (xpText) xpText.innerText = xpInLevel;
-        if (progressFill) progressFill.style.width = `${(xpInLevel / 1000) * 100}%`;
     }
     window.updateProfileUI = updateProfileUI;
     // ---- REPORT & RATINGS ----
@@ -981,13 +1009,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 800);
     }
 
-    window.addFriend = function() {
+    function updateRatingDisplay() {
+        const total = (stats.likes || 0) + (stats.dislikes || 0);
+        const likeEl = document.getElementById('rating-like-pct');
+        const dislikeEl = document.getElementById('rating-dislike-pct');
+        if (!likeEl || !dislikeEl) return;
+
+        if (total === 0) {
+            likeEl.innerText = '%0';
+            dislikeEl.innerText = '%0';
+        } else {
+            const likePct = Math.round((stats.likes / total) * 100);
+            const dislikePct = 100 - likePct;
+            likeEl.innerText = `%${likePct}`;
+            dislikeEl.innerText = `%${dislikePct}`;
+        }
+    }
+
+
+    window.addFriend = function () {
         if (!lastMatchData) {
             alert("Eklenecek kullanıcı bulunamadı.");
             return;
         }
         if (!currentUser.friends) currentUser.friends = [];
-        
+
         const friendName = lastMatchData.oppUsername || "Anonim Kullanıcı";
         if (currentUser.friends.some(f => f.name === friendName)) {
             alert("Bu kullanıcı zaten arkadaş listenizde.");
@@ -1008,7 +1054,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderFriendsInMessages() {
         const container = document.querySelector('.message-list');
         if (!container || !currentUser.friends) return;
-        
+
         // Keep existing static demo messages but prepend new friends
         const friendsHtml = currentUser.friends.map(f => `
             <div class="message-item" onclick="openDirectChat('${f.name}', 'Merhaba!')">
@@ -1019,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
         `).join('');
-        
+
         // For now, let's keep the static ones too for a "full" look
         const staticItems = `
              <div class="message-item unread" onclick="openDirectChat('Gizem', 'Aynen dünkü konuşma çok iyiydi :D')">
@@ -1035,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // Real updateStatsUI is at the end of the file.
 
-    document.getElementById('skip-rating-btn')?.addEventListener('click', () => { 
+    document.getElementById('skip-rating-btn')?.addEventListener('click', () => {
         hideOverlays();
         showTab('home-screen');
     });
@@ -1056,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- ROOMS & AUDIO MANAGEMENT ----
-    let roomClient = null;
+    roomClient = null;
     let roomMicMode = 'open'; // 'open' or 'ptt'
 
     window.toggleMuteUI = function (btn) {
@@ -1173,7 +1219,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('room-title').innerText = cleanName;
         document.getElementById('room-participants-grid').innerHTML = '';
-        document.getElementById('room-messages-container').innerHTML = '';
+        const msgContainers = document.querySelectorAll('#room-messages-container');
+        msgContainers.forEach(c => c.innerHTML = '');
 
         // Reset UI if voice was previously disabled
         const micBtn = document.getElementById('room-mic-mute');
@@ -1193,18 +1240,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Oda UI callback'lerini tanımla (RoomAudioClient'e geçirilecek)
         const onParticipants = (users) => {
-            window.currentRoomUsers = users;
-            renderRoomParticipants();
+            activeRoomParticipants = users;
+            updateParticipantsUI();
         };
         const onUserJoined = (user) => {
-            if (!window.currentRoomUsers.find(u => u.id === user.id)) {
-                window.currentRoomUsers.push(user);
-                renderRoomParticipants();
+            if (!activeRoomParticipants.find(u => u.id === user.id)) {
+                activeRoomParticipants.push(user);
+                updateParticipantsUI();
             }
         };
         const onUserLeft = (data) => {
-            window.currentRoomUsers = window.currentRoomUsers.filter(u => u.id !== data.id);
-            renderRoomParticipants();
+            activeRoomParticipants = activeRoomParticipants.filter(u => u.id !== data.id);
+            updateParticipantsUI();
         };
 
         if (!noVoice) {
@@ -1306,7 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showOverlay(document.getElementById('game-matching-screen'));
         const statusEl = document.getElementById('game-match-status');
         if (statusEl) statusEl.innerText = `${gameId.toUpperCase()} Aranıyor...`;
-        
+
         // Remove busy timeout/alerts and handle everything in-app
         globalSocket.emit('find_game_match', { gameId });
     }
@@ -1805,6 +1852,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1200);
     }
     window.sendRoomMessage = function () {
+
         const input = document.getElementById('room-input-box');
         if (!input || !input.value.trim()) return;
         const msg = input.value.trim();
@@ -1820,11 +1868,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 username: currentUser.username,
                 msgId: msgId
             };
-            
+
             // Local Echo: Sunucudan önce ekrana bas
-            addRoomMessage({ 
-                senderId: globalSocket.id, 
-                text: msg, 
+            addRoomMessage({
+                senderId: globalSocket.id,
+                text: msg,
                 username: currentUser.username,
                 msgId: msgId
             });
@@ -1836,118 +1884,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         input.value = '';
     }
-
-    // --- ROOM NAVIGATION & LOGIC ---
-    window.switchRoomTab = function (tab) {
-        document.querySelectorAll('.room-tab-content').forEach(c => c.classList.add('hidden'));
-        document.querySelectorAll('.room-tabs .tab-btn').forEach(b => b.classList.remove('active'));
-        
-        const target = document.getElementById(`tab-content-${tab}`);
-        const btn = document.getElementById(`tab-btn-${tab}`);
-        
-        if (target) target.classList.remove('hidden');
-        if (btn) btn.classList.add('active');
-    }
-
-    window.joinRoom = function (roomId) {
-        if (!globalSocket && (window.location.protocol !== 'file:')) return;
-        window.activeRoomId = roomId;
-        
-        const roomScreen = document.getElementById('room-inner-screen');
-        showOverlay(roomScreen);
-        
-        const roomTitle = document.getElementById('current-room-name');
-        if (roomTitle) {
-            // Önce socket verisine bak, yoksa fallback (radyo) verisine bak, o da yoksa varsayılan
-            let roomName = (currentRoomsData && currentRoomsData[roomId]) ? currentRoomsData[roomId].name : (fallbackRadios[roomId] ? fallbackRadios[roomId].name : 'Oda Sohbeti');
-            roomTitle.innerText = roomName;
-        }
-
-        document.getElementById('room-messages-container').innerHTML = '';
-        if (globalSocket) {
-            globalSocket.emit('join_room', { 
-                roomId: roomId, 
-                username: currentUser.username,
-                avatarUrl: currentUser.avatarUrl,
-                gold: currentUser.gold 
-            });
-        }
-        console.log(`Odaya katılınıyor: ${roomId}`);
-    }
-
-    window.joinVipRoom = function (roomId) {
-        if (!currentUser) return;
-        const goldNeeded = 500;
-        if (currentUser.gold < goldNeeded && !currentUser.isVip) {
-            alert(`Bu VIP odaya girmek için en az ${goldNeeded} Altın gerekir. \nSenin Altın: ${currentUser.gold}`);
-            return;
-        }
-        window.joinRoom(roomId);
-    }
-
-    window.joinRadioRoom = function (roomId) {
-        window.joinRoom(roomId);
-        let roomData = (currentRoomsData && currentRoomsData[roomId]) ? currentRoomsData[roomId] : fallbackRadios[roomId];
-        
-        if (roomData && roomData.stream) {
-            const radioArea = document.getElementById('room-radio-area');
-            if (radioArea) {
-                radioArea.classList.remove('hidden');
-                radioArea.style.display = 'block'; 
-                radioArea.innerHTML = `
-                    <div class="radio-status-bar">
-                        <span>📻 Canlı Yayın: <b>${roomData.name}</b></span>
-                        <button onclick="toggleRadioPlayback(this)" class="radio-ctrl-btn"><i class="fa-solid fa-pause"></i></button>
-                    </div>
-                `;
-            }
-
-            console.log("Radyo yayını hazırlanıyor:", roomData.stream);
-            try {
-                radioPlayer.pause();
-                radioPlayer.src = roomData.stream;
-                radioPlayer.load();
-                setTimeout(() => {
-                    radioPlayer.play().catch(e => {
-                        console.log("Otomatik oynatma bekliyor, butona basılabilir.");
-                    });
-                }, 500);
-            } catch(e) { console.error("Radyo hatası:", e); }
-        }
-    }
-
-    window.toggleRadioPlayback = function(btn) {
-        const icon = btn.querySelector('i');
-        if (radioPlayer.paused) {
-            radioPlayer.play();
-            icon.className = 'fa-solid fa-pause';
-        } else {
-            radioPlayer.pause();
-            icon.className = 'fa-solid fa-play';
-        }
-    }
-
-    window.refreshRooms = function (btn) {
-        if (!globalSocket) return;
-        btn.classList.add('fa-spin');
-        globalSocket.emit('get_rooms_info');
-        setTimeout(() => btn.classList.remove('fa-spin'), 1000);
-    }
-
-    // Duplicate function removed. Using the one defined in matching section.
-
-    window.leaveRoom = function () {
-        radioPlayer.pause();
-        radioPlayer.src = "";
-        const radioArea = document.getElementById('room-radio-area');
-        if (radioArea) radioArea.classList.add('hidden');
-
-        if (globalSocket && window.activeRoomId) {
-            globalSocket.emit('leave_room', { roomId: window.activeRoomId });
-        }
-        window.activeRoomId = null;
-        document.getElementById('room-inner-screen').classList.add('hidden');
-    }
+    } // end window.io
 
     initApp();
 });
+
