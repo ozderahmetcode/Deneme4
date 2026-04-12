@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OZDER - Elite & Premium</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&family=Playfair+Display:wght@700;900&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="">
+    <div id="app">
+        <div class="lv-pattern"></div>
+        <!-- AUTH SCREEN -->
+        <div id="auth-screen" class="screen overlay-screen hidden" style="justify-content: center; align-items: center; padding: 20px;">
+            <div class="auth-card">
+                <div class="brand-logo" style="font-size: 3.5rem; text-align: center; margin-bottom: 15px; border:none; color: var(--gold); font-family: 'Playfair Display', serif; font-weight: 900;">Ø</div>
+                <h2 style="text-align: center; margin-bottom: 25px;">Elite Sesli Sohbet</h2>
+                
+                <div class="auth-tabs">
+                    <button class="auth-tab-btn active" id="tab-login" onclick="switchAuthTab('login')">Giriş Yap</button>
+                    <button class="auth-tab-btn" id="tab-register" onclick="switchAuthTab('register')">Kayıt Ol</button>
+                </div>
+
+                <div id="login-form" class="auth-form">
+                    <button class="btn-google" onclick="doGoogleLogin()">
+                        <i class="fa-brands fa-google" style="color: #ea4335;"></i> Google ile Oturum Aç
+                    </button>
+                    <div style="text-align: center; color: #555; font-size: 0.8rem; margin-bottom: 5px;">veya</div>
+                    <input type="text" id="login-username" placeholder="Kullanıcı Adı" class="auth-input">
+                    <input type="password" id="login-password" placeholder="Parola" class="auth-input">
+                    <button class="btn-gold" onclick="doLogin()" style="margin-top: 10px;">Giriş Yap</button>
+                </div>
+
+                <div id="register-form" class="auth-form hidden">
+                    <button class="btn-google" onclick="doGoogleLogin()">
+                        <i class="fa-brands fa-google" style="color: #ea4335;"></i> Google ile Hızlı Kayıt
+                    </button>
+                    <div style="text-align: center; color: #555; font-size: 0.8rem; margin-bottom: 5px;">veya manuel doldur</div>
+                    <input type="text" id="reg-username" placeholder="Kullanıcı Adı" class="auth-input">
+                    <input type="password" id="reg-password" placeholder="Parola" class="auth-input">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="number" id="reg-age" placeholder="Yaş" class="auth-input">
+                        <input type="number" id="reg-height" placeholder="Boy (Ops)" class="auth-input">
+                        <input type="number" id="reg-weight" placeholder="Kilo (Ops)" class="auth-input">
+                    </div>
+
+                    <!-- CİNSİYET SEÇİMİ -->
+                    <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 12px; padding: 12px; margin: 5px 0;">
+                        <div style="font-size: 0.7rem; color: #856404; font-weight: 700; margin-bottom: 8px;">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Seçeceğiniz cinsiyet ile karşı cinsiyetten birisi ile eşleşeceksiniz. O yüzden cinsiyet seçimi önemlidir!
+                        </div>
+                        <div style="display: flex; gap: 15px; justify-content: center;">
+                            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:800; color:#333;">
+                                <input type="radio" name="reg-gender" value="erkek" id="reg-gender-m"> <i class="fa-solid fa-mars" style="color:#54a0ff;"></i> Erkek
+                            </label>
+                            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:800; color:#333;">
+                                <input type="radio" name="reg-gender" value="kadin" id="reg-gender-f"> <i class="fa-solid fa-venus" style="color:#fd79a8;"></i> Kadın
+                            </label>
+                        </div>
+                    </div>
+
+                    <select id="reg-region" class="auth-input">
+                        <option value="" disabled selected>Bağlandığın Bölge</option>
+                        <option value="Marmara">Marmara</option>
+                        <option value="Ege">Ege</option>
+                        <option value="İç Anadolu">İç Anadolu</option>
+                        <option value="Akdeniz">Akdeniz</option>
+                        <option value="Karadeniz">Karadeniz</option>
+                        <option value="Doğu Anadolu">Doğu Anadolu</option>
+                        <option value="Güneydoğu Anadolu">Güneydoğu Anadolu</option>
+                    </select>
+                    <select id="reg-zodiac" class="auth-input">
+                        <option value="" disabled selected>Burcunuz</option>
+                        <option value="Koç">♈ Koç</option>
+                        <option value="Boğa">♉ Boğa</option>
+                        <option value="İkizler">♊ İkizler</option>
+                        <option value="Yengeç">♋ Yengeç</option>
+                        <option value="Aslan">♌ Aslan</option>
+                        <option value="Başak">♍ Başak</option>
+                        <option value="Terazi">♎ Terazi</option>
+                        <option value="Akrep">♏ Akrep</option>
+                        <option value="Yay">♐ Yay</option>
+                        <option value="Oğlak">♑ Oğlak</option>
+                        <option value="Kova">♒ Kova</option>
+                        <option value="Balık">♓ Balık</option>
+                    </select>
+                    <button class="btn-gold" onclick="doRegister()" style="margin-top: 10px;">Hesabı Oluştur</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREENS WRAPPER -->
+        <div id="screens-container" class="hidden">
+            
+            <!-- HOME SCREEN -->
+            <div id="home-screen" class="screen active">
+                <div class="top-left-chip">
+                    <span>OZDER</span>
+                </div>
+                
+                <div class="right-sidebar">
+                    <div class="icon-item text-gold" onclick="openGoldStore()" style="cursor:pointer;"><i class="fa-solid fa-coins"></i> <span id="ui-gold-text">100</span> <i class="fa-solid fa-plus-circle"></i></div>
+                    <div class="icon-item" onclick="startVisualSearch()" style="cursor:pointer; background:rgba(186,148,91,0.2); color:var(--gold); border:1px solid var(--gold);"><i class="fa-solid fa-eye-low-vision"></i></div>
+                    <div class="icon-item"><i class="fa-solid fa-forward-fast"></i> 47</div>
+                    <div class="icon-item"><i class="fa-solid fa-user-plus"></i> 18</div>
+                    <div class="icon-item"><i class="fa-solid fa-clock"></i> 14</div>
+                    <div class="icon-item"><i class="fa-solid fa-gem"></i> 40</div>
+                </div>
+
+                <div class="center-call-button" id="start-call-btn">
+                    <div class="pulse-ring ring-1"></div>
+                    <div class="pulse-ring ring-2"></div>
+                    <div class="pulse-ring ring-3"></div>
+                    <button class="main-btn">
+                        <i class="fa-solid fa-phone"></i>
+                    </button>
+                </div>
+
+                <div class="filters-container" id="match-filters">
+                    <div class="filter-btns-row">
+                        <div class="filter-btn active" id="filter-opposite" onclick="setMatchPref('opposite')"><i class="fa-solid fa-venus-mars"></i></div>
+                        <div class="filter-btn" id="filter-mixed" onclick="setMatchPref('mixed')"><i class="fa-solid fa-shuffle"></i></div>
+                        <div class="filter-btn" id="filter-region" onclick="toggleRegionFilter()"><i class="fa-solid fa-location-dot"></i></div>
+                    </div>
+                    <div class="filter-labels-row">
+                        <span>Karşı Cins</span>
+                        <span>Karışık</span>
+                        <span id="filter-label-region">Bölge: Kapalı</span>
+                    </div>
+                </div>
+                
+                <div class="recent-matches" id="recent-matches-container">
+                    <!-- Javascript will fill this with history -->
+                </div>
+            </div>
+
+            <!-- ROOMS SCREEN -->
+            <div id="rooms-screen" class="screen hidden main-tab-screen">
+                <div class="screen-header" style="flex-direction: column; align-items: stretch; padding: 15px 20px 0 20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <button class="global-back-btn icon-btn" onclick="goBack()" style="display:none; margin-right:10px;"><i class="fa-solid fa-chevron-left"></i></button>
+                        <div style="flex:1;">
+                            <h2 style="margin:0;">Odalar</h2>
+                            <div style="font-size:0.6rem; color:#aaa; font-weight:700;">Hemen Bir Odaya Katıl</div>
+                        </div>
+                        <button class="icon-btn" onclick="refreshRooms(this.querySelector('i'))"><i class="fa-solid fa-rotate"></i></button>
+                    </div>
+                    
+                    <!-- Search Bar for Rooms -->
+                    <div class="search-container" style="margin-bottom:15px; position:relative;">
+                        <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:15px; top:50%; transform:translateY(-50%); color:#aaa; font-size:0.8rem;"></i>
+                        <input type="text" id="rooms-search-input" placeholder="Oda veya müzik ara..." oninput="filterRooms(this.value)" style="width:100%; padding:12px 15px 12px 40px; border-radius:15px; border:1px solid #eee; background:#f9f9f9; font-family:inherit; font-size:0.8rem; font-weight:600; outline:none; transition:all 0.3s; box-shadow:inset 0 2px 5px rgba(0,0,0,0.02);">
+                    </div>
+                    
+                    <!-- ROOM TABS -->
+                    <div class="room-tabs" style="display:flex; gap:10px; margin-bottom:10px;">
+                        <button id="tab-btn-radio" class="tab-btn active" onclick="switchRoomTab('radio')">📻 Radyo</button>
+                        <button id="tab-btn-vip" class="tab-btn" onclick="switchRoomTab('vip')">💎 VIP</button>
+                        <button id="tab-btn-normal" class="tab-btn" onclick="switchRoomTab('normal')">👥 Normal</button>
+                    </div>
+                </div>
+
+                <div class="scrollable-content">
+                    <!-- RADYO TAB -->
+                    <div id="tab-content-radio" class="room-tab-content">
+                        <div class="rooms-list" id="radio-rooms-list" style="margin-top:10px;">
+                            <div class="room-card" onclick="joinRadioRoom('radio_metro')">
+                                <div class="room-info"><h3>📻 Metro FM</h3><p>Canlı Müzik & Sohbet</p></div>
+                                <div class="room-stats"><div class="member-count">50/50 <i class="fa-solid fa-user"></i></div></div>
+                            </div>
+                            <div class="room-card" onclick="joinRadioRoom('radio_joy')">
+                                <div class="room-info"><h3>📻 Joy FM</h3><p>Yabancı Slow</p></div>
+                                <div class="room-stats"><div class="member-count">48/50 <i class="fa-solid fa-user"></i></div></div>
+                            </div>
+                            <div class="room-card" onclick="joinRadioRoom('radio_joy_turk')">
+                                <div class="room-info"><h3>📻 Joy Türk</h3><p>Türkçe Pop</p></div>
+                                <div class="room-stats"><div class="member-count">45/50 <i class="fa-solid fa-user"></i></div></div>
+                            </div>
+                            <div class="room-card" onclick="joinRadioRoom('radio_capital')">
+                                <div class="room-info"><h3>📻 Capital Radio</h3><p>Global Hit Müzik</p></div>
+                                <div class="room-stats"><div class="member-count">30/50 <i class="fa-solid fa-user"></i></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIP TAB -->
+                    <div id="tab-content-vip" class="room-tab-content hidden">
+                        <div class="rooms-list" id="vip-rooms-list" style="margin-top:10px;">
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_elmas')"><div class="room-info"><h3>💎 Elmas Salon</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">8/10 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_sampanya')"><div class="room-info"><h3>🥂 Şampanya Kulübü</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">4/5 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_royal')"><div class="room-info"><h3>⚜️ Royal Hall</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">5/8 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_penthouse')"><div class="room-info"><h3>🏢 Penthouse</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">3/6 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_yacht')"><div class="room-info"><h3>🛥️ Yat Kulübü</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">2/6 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_altin')"><div class="room-info"><h3>📀 Altın Plak</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">1/2 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_exclusive')"><div class="room-info"><h3>🕴️ Exclusive</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">2/2 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" style="border-left:4px solid var(--gold)" onclick="joinVipRoom('vip_zirve')"><div class="room-info"><h3>🏔️ Zirve Lounge</h3><p>🏅 VIP Odası</p></div><div class="room-stats"><div class="member-count">3/4 <i class="fa-solid fa-user"></i></div></div></div>
+                        </div>
+                    </div>
+
+                    <!-- NORMAL TAB -->
+                    <div id="tab-content-normal" class="room-tab-content hidden">
+                        <div class="rooms-list" id="normal-rooms-list" style="margin-top:10px;">
+                            <div class="room-card" onclick="joinRoom('kitap')"><div class="room-info"><h3>📚 Kitap Kurdu</h3><p>👥 Genel Sohbet</p></div><div class="room-stats"><div class="member-count">5/10 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" onclick="joinRoom('film')"><div class="room-info"><h3>🎬 Film & Dizi</h3><p>👥 Genel Sohbet</p></div><div class="room-stats"><div class="member-count">8/10 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" onclick="joinRoom('gece_kuslari')"><div class="room-info"><h3>🌙 Gece Kuşları</h3><p>👥 Genel Sohbet</p></div><div class="room-stats"><div class="member-count">6/10 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" onclick="joinRoom('kahve')"><div class="room-info"><h3>☕ Kahve Molası</h3><p>👥 Genel Sohbet</p></div><div class="room-stats"><div class="member-count">9/10 <i class="fa-solid fa-user"></i></div></div></div>
+                            <div class="room-card" onclick="joinRoom('teknoloji')"><div class="room-info"><h3>💻 Tekno Sohbet</h3><p>👥 Genel Sohbet</p></div><div class="room-stats"><div class="member-count">4/10 <i class="fa-solid fa-user"></i></div></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                    .room-tabs .tab-btn {
+                        flex:1; padding:10px; border-radius:12px; border:none; background:#f1f2f6; 
+                        color:#555; font-weight:800; font-size:0.75rem; cursor:pointer; transition:all 0.3s;
+                    }
+                    .room-tabs .tab-btn.active { background:var(--primary); color:white; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
+                    .room-tab-content.hidden { display:none; }
+                </style>
+            </div>
+
+            <!-- ROOM INNER (Chat) -->
+            <div id="room-inner-screen" class="screen hidden" style="z-index: 200; display: flex; flex-direction: column;">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="leaveRoom()"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h2 id="current-room-name">Oda Sohbeti</h2>
+                    <div style="flex:1;"></div>
+                    <div id="room-participant-badge" onclick="toggleParticipantsList()" style="background: rgba(186,148,91,0.2); padding: 5px 12px; border-radius: 20px; cursor: pointer; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(186,148,91,0.3);">
+                        <span id="room-users-count" style="color: #BA945B; font-weight: 800; font-size: 0.9rem;">1</span>
+                        <i class="fa-solid fa-users" style="color: #BA945B; font-size: 0.8rem;"></i>
+                    </div>
+                </div>
+
+                <!-- KATILIMCI LİSTESİ PANELİ -->
+                <div id="participants-list-panel" class="hidden" style="position: absolute; top: 60px; right: 10px; width: 220px; background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); z-index: 1000; overflow: hidden; border: 1px solid #eee;">
+                    <div style="padding: 10px 15px; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 800; font-size: 0.75rem; color: #333;">Odadakiler</span>
+                        <button onclick="toggleParticipantsList()" style="background:none; border:none; color:#aaa; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div id="participants-container" style="max-height: 250px; overflow-y: auto; padding: 5px 0;">
+                        <!-- Kullanıcılar burada listelenecek -->
+                    </div>
+                </div>
+                <!-- Radio Status Area -->
+                <div id="room-radio-area" class="hidden"></div>
+                <div id="room-messages-container" class="scrollable-content" style="padding:20px 20px 100px 20px; flex:1; display:flex; flex-direction:column; gap:10px; background: #fdfdfd;">
+                    <!-- Messages here -->
+                </div>
+                <div class="chat-input-area" style="position: absolute; bottom: 0; left: 0; right: 0; background: #fff; padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="room-input-box" placeholder="Mesaj yaz..." style="flex:1; padding:12px 15px; border-radius:20px; border:1px solid #eee; background:#f9f9f9; outline:none;" onkeypress="if(event.key==='Enter') sendRoomMessage()">
+                    <button class="send-btn" onclick="sendRoomMessage()" style="width:45px; height:45px; border-radius:50%; border:none; background:var(--gold); color:white; cursor:pointer;"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </div>
+
+            <!-- MENU / GAMES SCREEN -->
+            <div id="menu-screen" class="screen hidden main-tab-screen">
+                <div class="screen-header">
+                    <button class="global-back-btn icon-btn" onclick="goBack()" style="display:none; margin-right:10px;"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h2>Mini Oyunlar</h2>
+                </div>
+                <div class="scrollable-content pt-4">
+                    <div class="games-grid">
+                        <div class="game-card" onclick="startGameMatching('xox')">
+                            <i class="fa-solid fa-xmarks-lines"></i>
+                            <span>XOX</span>
+                            <div class="member-count" id="game-count-xox" style="font-size:0.6rem; margin-top:0;">0 Aktif</div>
+                        </div>
+                        <div class="game-card" onclick="startGameMatching('tetris')">
+                            <i class="fa-solid fa-cubes" style="color:#d63031;"></i>
+                            <span>Tetris</span>
+                            <div class="member-count" id="game-count-tetris" style="font-size:0.6rem; margin-top:0;">0 Aktif</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MESSAGES SCREEN -->
+            <div id="messages-screen" class="screen hidden main-tab-screen">
+                <div class="screen-header">
+                    <button class="global-back-btn icon-btn" onclick="goBack()" style="display:none; margin-right:10px;"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h2 style="flex:1;">Mesajlar & Arkadaşlar</h2>
+                    <button class="icon-btn" onclick="alert('Kullanıcı adı ile arkadaş ekleme sayfası çok yakında!')"><i class="fa-solid fa-user-plus"></i></button>
+                </div>
+                <div style="padding: 0 20px;">
+                    <div class="chat-input-area" style="background:var(--bg-card); border-radius:15px; margin-bottom:10px;">
+                        <input type="text" style="width:100%; border:none; background:transparent; padding:10px; color:var(--text-dark);" placeholder="Arkadaşlarında Ara...">
+                        <i class="fa-solid fa-search" style="color:var(--text-muted);"></i>
+                    </div>
+                </div>
+                <div class="scrollable-content">
+                    <div class="message-list">
+                        <div class="message-item unread" onclick="openDirectChat('Gizem', 'Aynen dünkü konuşma çok iyiydi :D')">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Gizem" alt="User">
+                            <div class="msg-content">
+                                <div class="msg-top"><h4>gizemesr</h4><span class="time">10 dk</span></div>
+                                <p>Aynen dünkü konuşma çok iyiydi :D</p>
+                            </div>
+                            <div class="unread-badge">1</div>
+                        </div>
+                        <div class="message-item" onclick="openDirectChat('Can', 'Naber nasıl gidiyor?')">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Can" alt="User">
+                            <div class="msg-content">
+                                <div class="msg-top"><h4>gece_34</h4><span class="time">Dün</span></div>
+                                <p>Teşekkürler tavsiyen için kanka</p>
+                            </div>
+                        </div>
+                        <div class="message-item" onclick="openDirectChat('Pelin', 'Fotoğraf gönderdi')">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Pelin" alt="User">
+                            <div class="msg-content">
+                                <div class="msg-top"><h4>Pelinxx</h4><span class="time">Salı</span></div>
+                                <p>Fotoğraf gönderdi</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PROFILE SCREEN -->
+            <div id="profile-screen" class="screen hidden main-tab-screen">
+                <div class="screen-header">
+                    <button class="global-back-btn icon-btn" onclick="goBack()" style="display:none; margin-right:10px;"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h2 style="flex:1;">Profilim</h2>
+                    <button class="icon-btn" onclick="openModal('settings-modal')"><i class="fa-solid fa-gear"></i></button>
+                </div>
+                <div class="scrollable-content" style="padding-bottom:100px;">
+                    <!-- PROFILE TABS NAV -->
+                    <div class="profile-tabs">
+                        <button id="p-tab-genel" class="p-tab-btn active" onclick="switchProfileTab('genel')"><i class="fa-solid fa-user"></i> <span>Profil</span></button>
+                        <button id="p-tab-quests" class="p-tab-btn" onclick="switchProfileTab('quests')"><i class="fa-solid fa-bullseye"></i> <span>Görevler</span></button>
+                        <button id="p-tab-stats" class="p-tab-btn" onclick="switchProfileTab('stats')"><i class="fa-solid fa-chart-line"></i> <span>Denge</span></button>
+                    </div>
+
+                    <!-- TAB: GENEL -->
+                    <div id="p-content-genel" class="profile-tab-content">
+                        <div class="profile-header-card">
+                            <div class="profile-avatar-wrap" onclick="showAvatarModal()">
+                                <img id="user-avatar-img" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Me&backgroundColor=222" alt="My Profile">
+                                <button class="edit-avatar-btn"><i class="fa-solid fa-camera"></i></button>
+                            </div>
+                            <h3><span id="profile-username-text">kullanıcı_adı</span> <button class="edit-name-btn" onclick="openModal('edit-profile-modal')"><i class="fa-solid fa-pencil"></i></button></h3>
+                            <p class="profil-stats" style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">
+                                <span id="profile-age-text">Yaş: Gizli</span> | <span id="profile-height-text">Boy: Gizli</span> | <span id="profile-weight-text">Kilo: Gizli</span>
+                            </p>
+                            <p class="profil-bio" id="profile-bio-text" style="font-weight: 600; margin-top: 5px;"></p>
+                            
+                            <div style="display:flex; align-items:center; gap:5px; color:var(--primary); font-size:0.75rem; font-weight:800; margin-bottom:15px;">
+                                <i class="fa-solid fa-location-dot"></i> <span id="profile-region-text">Marmara</span>
+                            </div>
+                            
+                            <div class="level-bar-container">
+                                <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight: 800; color:var(--text-dark);">
+                                    <span>Seviye <span id="user-level">1</span></span>
+                                    <span><span id="user-xp">0</span>/1000 XP</span>
+                                </div>
+                                <div class="prog-bar"><div class="fill bg-gold" id="xp-fill" style="width:0%"></div></div>
+                            </div>
+
+                            <div class="badges-container">
+                                <div class="badge"><i class="fa-solid fa-moon"></i> Gece Kuşu</div>
+                                <div class="badge"><i class="fa-solid fa-comments"></i> İyi Dinleyici</div>
+                                <div class="badge locked"><i class="fa-solid fa-face-laugh-squint"></i> Espri Makinesi</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: GÖREVLER -->
+                    <div id="p-content-quests" class="profile-tab-content hidden">
+                        <div class="quests-container" style="background:#fff; border-radius:24px; padding:20px; border:1px solid #eee; margin:20px;">
+                            <h3 style="color:var(--primary); margin-bottom:15px; font-size:1rem; font-weight:800;">Günlük Görevler</h3>
+                            <div id="quest-list">
+                                <!-- Quests injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: DENGE (Premium Stats) -->
+                    <div id="p-content-stats" class="profile-tab-content hidden" style="padding: 10px 20px;">
+                        <!-- Graph Section -->
+                        <div class="stats-chart-container" style="margin-bottom:20px; background:#fff; border-radius:15px; padding:15px; border:1px solid #eee;">
+                            <canvas id="profileStatsChart" style="max-height:180px;"></canvas>
+                        </div>
+
+                        <div class="stats-premium-grid">
+                            <div class="p-stat-card">
+                                <div class="p-stat-val" id="stat-like-ratio">%0</div>
+                                <div class="p-stat-lbl">BEĞENİLME</div>
+                            </div>
+                            <div class="p-stat-card">
+                                <div class="p-stat-val" id="stat-dislike-ratio">%0</div>
+                                <div class="p-stat-lbl">BEĞENİLMEME</div>
+                            </div>
+                            <div class="p-stat-card">
+                                <div class="p-stat-val" id="stat-talk-time">0s</div>
+                                <div class="p-stat-lbl">ORT. GÖRÜŞME</div>
+                            </div>
+                            <div class="p-stat-card">
+                                <div class="p-stat-val" id="stat-completion">%0</div>
+                                <div class="p-stat-lbl">TAMAMLAMA</div>
+                            </div>
+                            <div class="p-stat-card full-width">
+                                <div class="p-stat-val" id="stat-report-rate">%0</div>
+                                <div class="p-stat-lbl">RAPORLANMA ORANI</div>
+                            </div>
+                        </div>
+
+                        <div class="trust-score-container" style="margin-top:15px;">
+                            <div class="trust-label">OZDER GÜVEN SKORU</div>
+                            <div class="trust-value" id="trust-score">%100</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS MODAL (IMAGE 5) -->
+            <div id="settings-modal" class="modal-overlay hidden" style="z-index: 9999;">
+                <div class="modal-content premium-card" style="padding:0; overflow:hidden;">
+                    <div class="modal-header" style="padding:20px; background:#f8f9fa; border-bottom:1px solid #eee;">
+                        <h3 style="margin:0;">Sistem Ayarları</h3>
+                        <button onclick="closeModal('settings-modal')" class="close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body" style="padding:10px; display:flex; flex-direction:column; gap:6px;">
+                        <div class="setting-item" onclick="openModal('vip-modal')">
+                            <div class="lhs"><div class="set-icon" style="background:#ffeaa7; color:#d35400;"><i class="fa-solid fa-crown"></i></div><span>VIP Ayrıcalıkları</span></div>
+                        </div>
+                        <div class="setting-item" onclick="openModal('password-modal')">
+                            <div class="lhs"><div class="set-icon" style="background:#55efc4; color:#00b894;"><i class="fa-solid fa-key"></i></div><span>Şifre Değiştir</span></div>
+                        </div>
+                        <div class="setting-item">
+                            <div class="lhs"><div class="set-icon" style="background:#2d3436; color:#fff;"><i class="fa-solid fa-moon"></i></div><span>Hafif Mod (Lite)</span></div>
+                            <input type="checkbox" onchange="toggleLiteMode(this.checked)">
+                        </div>
+                        <div class="setting-item" onclick="openModal('legal-modal')">
+                            <div class="lhs"><div class="set-icon" style="background:#74b9ff; color:#fff;"><i class="fa-solid fa-hammer"></i></div><span>Yasal Haklar (KVKK)</span></div>
+                        </div>
+                        <div class="setting-item" onclick="openModal('faq-modal')">
+                            <div class="lhs"><div class="set-icon" style="background:#a29bfe; color:#fff;"><i class="fa-solid fa-circle-question"></i></div><span>Yardım ve SSS</span></div>
+                        </div>
+                        <div class="setting-item" onclick="alert('Destek talebiniz alındı.')">
+                            <div class="lhs"><div class="set-icon" style="background:#ffeaa7; color:#d35400;"><i class="fa-solid fa-headset"></i></div><span>Bize Ulaşın</span></div>
+                        </div>
+                        <div class="setting-item" onclick="doLogout()" style="margin-top:10px;">
+                            <div class="lhs"><div class="set-icon" style="background:#f1f2f6; color:#636e72;"><i class="fa-solid fa-arrow-right-from-bracket"></i></div><span>Çıkış Yap</span></div>
+                        </div>
+                        <div class="setting-item" onclick="deleteAccount()" style="background: rgba(255,118,117,0.05); border: 1px solid rgba(255,118,117,0.1);">
+                            <div class="lhs"><div class="set-icon" style="background:#ff7675; color:#fff;"><i class="fa-solid fa-trash"></i></div><span style="color:var(--red);">Hesabı Tamamen Sil</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PREMIUM MODALS WRAPPER -->
+            <div id="ozder-modals">
+                <!-- EDIT PROFILE MODAL -->
+                <div id="edit-profile-modal" class="modal-overlay hidden">
+                    <div class="modal-content premium-card">
+                        <div class="modal-header">
+                            <h3>Profili Düzenle</h3>
+                            <button onclick="closeModal('edit-profile-modal')" class="close-btn">&times;</button>
+                        </div>
+                        <div class="modal-body profile-edit-body">
+                            <div class="input-group">
+                                <label>Kullanıcı Adı <small id="name-change-info" style="color:var(--gold);">(İlk değişim ücretsiz)</small></label>
+                                <input type="text" id="edit-username" placeholder="Yeni kullanıcı adı...">
+                            </div>
+                            <div class="input-group">
+                                <label>Bio (Hakkımda)</label>
+                                <textarea id="edit-bio" placeholder="Kendinden bahset..." rows="3"></textarea>
+                            </div>
+                            <div class="edit-profile-row">
+                                <div class="input-group">
+                                    <label>Yaş</label>
+                                    <input type="number" id="edit-age">
+                                </div>
+                                <div class="input-group">
+                                    <label>Boy (cm)</label>
+                                    <input type="number" id="edit-height">
+                                </div>
+                                <div class="input-group">
+                                    <label>Kilo (kg)</label>
+                                    <input type="number" id="edit-weight">
+                                </div>
+                            </div>
+                            <button class="btn-gold" style="width:100%; margin-top:15px; border-radius:15px; padding:15px;" onclick="saveProfileChanges()">Değişiklikleri Kaydet</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CHANGE PASSWORD MODAL -->
+                <div id="password-modal" class="modal-overlay hidden">
+                    <div class="modal-content premium-card">
+                        <div class="modal-header">
+                            <h3>Şifreyi Değiştir</h3>
+                            <button onclick="closeModal('password-modal')" class="close-btn">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="password" id="old-pass" placeholder="Mevcut Şifre" class="premium-input">
+                            <input type="password" id="new-pass" placeholder="Yeni Şifre" class="premium-input">
+                            <button class="btn-gold" style="width:100%; margin-top:15px;" onclick="saveNewPassword()">Güncelle</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIP MODAL -->
+                <div id="vip-modal" class="modal-overlay hidden">
+                    <div class="modal-content premium-card" style="text-align:center;">
+                        <i class="fa-solid fa-crown" style="font-size:3rem; color:var(--gold); margin-bottom:15px;"></i>
+                        <h2 style="font-family:'Playfair Display', serif;">OZDER VIP</h2>
+                        <ul style="text-align:left; font-size:0.8rem; line-height:1.8; margin:20px 0; color:#555;">
+                            <li>✨ **Sınırsız Eşleşme:** Bekleme süresi olmadan konuş.</li>
+                            <li>🏆 **Altın İsim:** Listelerde ve odalarda ismin altın parlasın.</li>
+                            <li>🕵️ **Gizli Mod:** Profilini istediğin zaman gizle.</li>
+                            <li>🚀 **2 Kat XP:** Seviyeleri hızla tırman.</li>
+                        </ul>
+                        <button class="btn-gold" style="width:100%;" onclick="alert('VIP Servisleri çok yakında aktif edilecektir!')">Şimdi VIP Ol</button>
+                        <button onclick="closeModal('vip-modal')" style="background:none; border:none; margin-top:10px; color:#aaa;">Kapat</button>
+                    </div>
+                </div>
+
+                <!-- LEGAL (KVKK) MODAL -->
+                <div id="legal-modal" class="modal-overlay hidden">
+                    <div class="modal-content premium-card">
+                        <h3>Kişisel Verilerin Korunması (KVKK)</h3>
+                        <div style="font-size:0.7rem; max-height:300px; overflow-y:auto; color:#666; line-height:1.6; padding:10px;">
+                            OZDER Social Club olarak verilerinizin gizliliğine önem veriyoruz. 
+                            1. Verileriniz sadece eşleşme kalitesini artırmak için kullanılır. 
+                            2. 3. şahıslarla asla paylaşılmaz. 
+                            3. İstediğiniz an hesabınızı ve tüm verilerinizi silebilirsiniz. 
+                            4. Konuşmalarınız uçtan uca şifrelenir ve sunucularımızda saklanmaz.
+                        </div>
+                        <button class="btn-gold" style="width:100%; margin-top:10px;" onclick="closeModal('legal-modal')">Anladım</button>
+                    </div>
+                </div>
+
+                <!-- FAQ (SSS) MODAL -->
+                <div id="faq-modal" class="modal-overlay hidden">
+                    <div class="modal-content premium-card">
+                        <h3>Yardım & SSS</h3>
+                        <div style="font-size:0.8rem; color:#555; display:flex; flex-direction:column; gap:15px; margin-top:10px;">
+                            <div><strong>S: Eşleşme neden yavaş?</strong><br>C: Elite üyelerimiz kalite bazlı eşleşir, bazen biraz sabır gerekebilir.</div>
+                            <div><strong>S: Nasıl Seviye Atlarım?</strong><br>C: Odalara girerek, konuşarak ve görevleri yaparak XP kazanabilirsin.</div>
+                            <div><strong>S: Altın Ne İşe Yarar?</strong><br>C: İsim değiştirme ve yakında gelecek olan özel hediyelerde kullanılır.</div>
+                        </div>
+                        <button class="btn-gold" style="width:100%; margin-top:15px;" onclick="closeModal('faq-modal')">Kapat</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OVERLAYS -->
+            <!-- MATCHING SCREEN -->
+            <div id="matching-screen" class="screen overlay-screen hidden" style="justify-content: center; align-items: center;">
+                <div class="avatar-container">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=111" alt="Avatar" class="avatar-img" id="match-avatar">
+                </div>
+                <h2 style="font-size: 1.4rem; font-weight: 800; margin-bottom: 5px;" id="match-username">Elite_User</h2>
+                <div id="match-status-text" style="font-size: 0.8rem; font-weight: 600; color: #aaa; margin-bottom: 30px;">Sinyal Aranıyor...</div>
+                <div id="connect-countdown" class="hidden" style="font-size: 1.2rem; font-weight: 800; color: var(--gold); margin-bottom: 20px;">5</div>
+
+                <div style="display: flex; gap: 40px;">
+                    <div style="text-align: center;"><button class="circle-btn btn-skip" id="skip-btn"><i class="fa-solid fa-angles-right"></i></button></div>
+                    <div style="text-align: center;"><button class="circle-btn btn-accept" id="accept-btn"><i class="fa-solid fa-check"></i></button></div>
+                </div>
+            </div>
+
+            <!-- IN CALL SCREEN -->
+            <div id="incall-screen" class="screen overlay-screen hidden">
+                <div class="call-header">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=111" id="incall-avatar" style="width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--gold);">
+                    <h1 style="font-family: 'Playfair Display', serif; font-size: 3.5rem; letter-spacing: 5px; color: var(--gold);">OZDER</h1>
+                    <h2 id="incall-username-text" style="color: white; font-size: 1.2rem; margin-top: 10px; font-weight: 800;">Elite Kullanici</h2>
+                    <p style="font-family: 'Montserrat', sans-serif; font-weight: 700; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 2px;">Elite Social Club</p>
+                </div>
+
+                <div id="ice-breaker-box" class="ice-breaker-box hidden">
+                    <strong>Buz Kıran:</strong> <span id="ice-breaker-text">Sence en iyi pizza malzemesi nedir?</span>
+                </div>
+
+                <div style="position: relative; width: 180px; height: 180px; display: flex; justify-content: center; align-items: center; margin-top: 30px;">
+                    <svg width="180" height="180"><circle class="progress-ring__circle" stroke-width="8" fill="transparent" r="84" cx="90" cy="90"/></svg>
+                    <div class="time-left" id="active-countdown">120</div>
+                </div>
+
+                <div style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 30px; margin-bottom: 20px; margin-top:auto;">
+                    <div class="small-actions">
+                        <div style="text-align: center;"><button class="small-btn" onclick="toggleMuteUI(this)"><i class="fa-solid fa-microphone"></i></button><div style="font-size: 0.65rem; margin-top:5px;">Sustur</div></div>
+                        <div style="text-align: center;"><button class="small-btn" onclick="addTimeGlobally()"><i class="fa-solid fa-clock"></i></button><div style="font-size: 0.65rem; margin-top:5px;">Süre Uzat</div></div>
+                        <div style="text-align: center;"><button class="small-btn" onclick="alert('Yapay Zeka Dip Gürültü Engelleme Aktif Edildi!')"><i class="fa-solid fa-ear-listen"></i></button><div style="font-size: 0.65rem; margin-top:5px;">Gürültü</div></div>
+                    </div>
+                    <div style="text-align: center;">
+                        <button class="circle-btn btn-reject" id="hangup-btn" style="width: 75px; height: 75px; font-size: 2rem;"><i class="fa-solid fa-phone-slash"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RATING SCREEN -->
+            <div id="rating-screen" class="screen overlay-screen hidden" style="justify-content: center; align-items: center; padding: 20px;">
+                <div style="font-size: 1.2rem; font-weight: 800; color: var(--gold); margin-bottom: 20px;">Görüşmeyi Değerlendir</div>
+
+                <!-- ORANLAR -->
+                <div style="display:flex; gap:20px; margin-bottom:25px; text-align:center;">
+                    <div>
+                        <div style="font-size:2rem; color:#00b894;">👍</div>
+                        <div id="rating-like-pct" style="font-weight:900; color:#00b894; font-size:1.1rem;">%0</div>
+                        <div style="font-size:0.6rem; color:#aaa;">Beğeni</div>
+                    </div>
+                    <div>
+                        <div style="font-size:2rem; color:#d63031;">👎</div>
+                        <div id="rating-dislike-pct" style="font-weight:900; color:#d63031; font-size:1.1rem;">%0</div>
+                        <div style="font-size:0.6rem; color:#aaa;">Beğenmeme</div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 30px; margin-bottom: 25px;">
+                    <div style="text-align: center;">
+                        <button class="circle-btn btn-reject" onclick="rateDislike()"><i class="fa-solid fa-thumbs-down"></i></button>
+                        <div style="font-size: 0.65rem; font-weight: 800; color: #aaa; margin-top: 8px;">Kötüydü</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <button class="circle-btn btn-accept" onclick="rateLike()"><i class="fa-solid fa-thumbs-up"></i></button>
+                        <div style="font-size: 0.65rem; font-weight: 800; color: #00b894; margin-top: 8px;">Harikaydı</div>
+                    </div>
+                </div>
+
+                <button class="btn-gold" style="width: 80%; background:var(--gold); color:var(--bg-dark); margin-bottom: 12px; border-radius: 30px; padding: 16px; font-weight: 900;" onclick="addFriend()">
+                    <i class="fa-solid fa-user-plus"></i> Arkadaş Ekle
+                </button>
+
+                <button class="circle-btn" style="width:50px; height:50px; background:rgba(255,118,117,0.1); margin-bottom:15px; border: 1px solid rgba(255,118,117,0.2);" onclick="showReportOptions()">
+                    <i class="fa-solid fa-flag" style="color:var(--red);"></i>
+                </button>
+                
+                <button class="btn-gold" style="width: 80%; background:#1a1a1a; color:var(--gold); border:1px solid var(--gold); margin-bottom: 15px;" id="call-again-btn">
+                    <i class="fa-solid fa-phone"></i> Tekrar Bağlan (VIP)
+                </button>
+                <button style="background:transparent; border:none; color:#888; font-weight:700; cursor:pointer;" id="skip-rating-btn">Geç</button>
+
+                <!-- REPORT MODAL -->
+                <div id="report-modal" class="hidden" style="position: absolute; bottom: 0; left: 0; width: 100%; padding: 25px; background: white; color: var(--text-dark); border-top-left-radius: 20px; border-top-right-radius: 20px; display: flex; flex-direction: column; gap:10px; z-index:50; box-shadow: 0 -5px 20px rgba(0,0,0,0.1);">
+                    <h3 style="text-align: center; color: var(--red); margin-bottom: 10px;">Raporla</h3>
+                    <button style="padding:15px; background:#f1f2f6; border:1px solid #dfe6e9; color:var(--text-dark); border-radius:12px; cursor:pointer;" onclick="submitReport('Yüzüme kapattı')">Yüzüme kapattı</button>
+                    <button style="padding:15px; background:#f1f2f6; border:1px solid #dfe6e9; color:var(--text-dark); border-radius:12px; cursor:pointer;" onclick="submitReport('Küfür etti')">Küfür etti</button>
+                    <button style="margin-top: 10px; padding: 15px; background:transparent; border:none; color:#a4b0be; font-weight:bold; cursor:pointer;" onclick="closeReportOptions()">İptal</button>
+                </div>
+            </div>
+
+            <!-- ROOM INNER INTERIOR -->
+            <div id="room-inner-screen" class="screen overlay-screen hidden">
+                 <div class="room-header-lv">
+                    <button class="global-back-btn icon-btn" style="border:none;" onclick="leaveRoom()"><i class="fa-solid fa-chevron-left"></i></button>
+                    <div style="text-align:center; flex:1;">
+                        <h3 id="room-title" style="color:var(--gold); margin:0; font-family: 'Playfair Display', serif;">Gece Kuşları</h3>
+                        <div id="radio-now-playing" class="hidden" style="font-size:0.7rem; color:var(--white); font-weight:700; opacity:0.6; animation: marquee 10s linear infinite; white-space:nowrap;">🎵 Lvbel C5 - Ben Ünlüyüm</div>
+                    </div>
+                    <button class="icon-btn" style="border:none; color:var(--gold); background:transparent;"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                </div>
+                
+                <!-- Radio Visualizer / Album Art -->
+                <div id="radio-player-widget" class="hidden" style="padding:15px; background:var(--bg-lite); display:flex; flex-direction:column; align-items:center; gap:8px; border-bottom:1px solid #eee; position:relative;">
+                    <div style="display:flex; align-items:center; gap:15px; width:100%;">
+                        <div style="width:60px; height:60px; border-radius:12px; background:linear-gradient(135deg, var(--primary), var(--gold)); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i class="fa-solid fa-compact-disc fa-spin" style="font-size:2rem; color:rgba(255,255,255,0.4);"></i>
+                        </div>
+                        <div style="flex:1;">
+                            <h4 id="radio-song-title" style="margin:0; font-size:0.9rem; color:var(--text-dark);">Radyo Yayını</h4>
+                            <p id="radio-artist-name" style="margin:0; font-size:0.75rem; color:#888;">Resmi İstasyon</p>
+                        </div>
+                        <!-- PLAY/PAUSE FOR AUTOPLAY POLICY -->
+                        <button id="radio-play-trigger" class="circle-btn" style="width:40px; height:40px; background:var(--primary); font-size:1rem;" onclick="toggleRadioPlay()"><i class="fa-solid fa-play"></i></button>
+                    </div>
+                    
+                    <!-- Volume Control (Music vs Voice) -->
+                    <div style="width:100%; display:flex; align-items:center; gap:10px;">
+                        <i class="fa-solid fa-volume-low" style="font-size:0.7rem; color:#888;"></i>
+                        <input type="range" id="radio-volume-slider" min="0" max="1" step="0.1" value="0.5" style="flex:1; height:4px; cursor:pointer;" oninput="updateRadioVolume(this.value)">
+                        <i class="fa-solid fa-volume-high" style="font-size:0.7rem; color:#888;"></i>
+                    </div>
+                </div>
+
+                <div class="participants-container" style="background: rgba(0,0,0,0.2); margin: 0 15px; border-radius: 20px; border: 1px solid rgba(155, 126, 75, 0.1);">
+                    <div class="room-listeners" id="room-participants-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; padding:15px; min-height:80px;">
+                        <!-- Participant avatars will go here -->
+                    </div>
+                </div>
+                
+                <div class="room-controls" style="padding:10px; display:flex; flex-direction:column; align-items:center;">
+                    <button class="mic-status-badge" id="room-mic-mode" onclick="toggleRoomMicMode()">Mode: Open Mic</button>
+                    <button id="ptt-button" class="hidden" style="width:90%; padding:15px; border-radius:30px; background:var(--gold); color:var(--bg-dark); border:none; font-weight:900; font-size:1.1rem; cursor:pointer; box-shadow: 0 5px 20px rgba(186, 148, 91, 0.3);" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'">🎤 HOLD TO TALK</button>
+                </div>
+
+                <div class="chat-window" style="background:transparent; flex:1; display:flex; flex-direction:column; position:relative;">
+                    <div class="chat-body" id="room-messages-container" style="flex:1;">
+                        <div class="chat-bubble them"><span>Odaya Hoş Geldin!</span></div>
+                    </div>
+                    <div class="chat-input-area">
+                        <div class="chat-input-wrapper">
+                            <input type="text" id="room-input-box" class="chat-input" placeholder="Type a message...">
+                        </div>
+                        <button class="chat-send-btn" onclick="sendRoomMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Optimized hidden container for audio (display:none can block audio in some browsers) -->
+            <div id="room-audio-container" style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;"></div>
+
+            <!-- GAME MATCHING SCREEN -->
+            <div id="game-matching-screen" class="screen overlay-screen hidden" style="background: radial-gradient(circle, #2d3436 0%, #000 100%);">
+                <div class="center-call-button">
+                    <div class="pulse-ring ring-1"></div>
+                    <div class="pulse-ring ring-2"></div>
+                    <div class="pulse-ring ring-3"></div>
+                    <div style="z-index:10; text-align:center;">
+                        <i id="game-match-icon" class="fa-solid fa-gamepad" style="font-size:3rem; color:var(--gold); margin-bottom:20px;"></i>
+                        <h2 style="color:white; font-weight:800;" id="game-match-status">Oyun Aranıyor...</h2>
+                        <p style="color:var(--gold); font-weight:700; margin-top:10px;">Sesli Kapışma Başlıyor</p>
+                    </div>
+                </div>
+                <button class="btn-gold" style="position:absolute; bottom:50px; left:50%; transform:translateX(-50%); width:80%; background:transparent; border:1px solid white;" onclick="cancelGameSearch()">Vazgeç</button>
+            </div>
+
+            <!-- GAME INTERIOR SCREEN -->
+            <div id="game-screen" class="screen overlay-screen hidden" style="background: #0f172a;">
+                <div class="screen-header" style="background:#1e293b; padding:15px; border-bottom:1px solid #334155;">
+                    <button class="icon-btn" style="border:none;" onclick="quitGame()"><i class="fa-solid fa-xmark"></i></button>
+                    <div style="text-align:center;">
+                        <h3 id="game-title-header" style="color:white; font-size:1rem;">XOX Kapışması</h3>
+                        <div id="game-timer" style="color:var(--gold); font-weight:900; font-size:0.8rem;">200s</div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <img id="game-opp-avatar" src="" style="width:30px; height:30px; border-radius:50%; border:1px solid var(--gold);">
+                        <span id="game-opp-name" style="font-size:0.7rem; font-weight:800; color:white;">Rakip</span>
+                    </div>
+                </div>
+
+                <div id="game-container-area" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:20px;">
+                    <!-- Game specific content will be injected here -->
+                    <div id="xox-board-wrapper" class="hidden"></div>
+                    
+                    <div id="tetris-board-wrapper" class="hidden" style="display:flex; gap:20px; align-items:flex-end;">
+                        <div class="my-tetris" style="text-align:center;">
+                            <canvas id="tetris-canvas" width="200" height="400" style="border:4px solid var(--primary); border-radius:10px;"></canvas>
+                            <div style="color:white; font-weight:800; margin-top:5px;">Sen: <span id="my-tetris-score">0</span></div>
+                        </div>
+                        <div class="opp-tetris" style="text-align:center;">
+                            <canvas id="opp-tetris-canvas" width="100" height="200" style="border:2px solid #444; border-radius:5px; opacity:0.7;"></canvas>
+                            <div style="color:#aaa; font-weight:800; font-size:0.7rem; margin-top:5px;">Rakip: <span id="opp-tetris-score">0</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Call Controls Overlay (Small) -->
+                <div style="padding:15px; background:rgba(30,41,59,0.8); display:flex; justify-content:center; gap:20px;">
+                    <button class="small-btn" onclick="toggleMuteUI(this)" style="background:rgba(255,255,255,0.1);"><i class="fa-solid fa-microphone"></i></button>
+                    <button class="small-btn" onclick="quitGame()" style="background:var(--red);"><i class="fa-solid fa-phone-slash"></i></button>
+                    <button class="small-btn" onclick="openGameChat()" style="background:rgba(255,255,255,0.1);"><i class="fa-solid fa-comment"></i></button>
+                </div>
+                
+                <div id="game-audio-container" style="display:none;"></div>
+            </div>
+
+            <!-- DIRECT CHAT MODAL (DM) -->
+            <div id="active-chat-screen" class="screen overlay-screen hidden">
+                <div class="chat-window">
+                    <div class="chat-header">
+                        <button class="global-back-btn icon-btn" style="border:none;" onclick="closeDirectChat()"><i class="fa-solid fa-chevron-left"></i></button>
+                        <h3 id="chat-header-title" style="font-family: 'Playfair Display', serif; letter-spacing: 1px;">OZDER Chat</h3>
+                        <div style="display:flex; gap:10px;">
+                            <button class="icon-btn" style="border:none; color:var(--primary);" onclick="dmVoiceCall()"><i class="fa-solid fa-phone"></i></button>
+                            <button class="icon-btn" style="border:none; color:var(--primary);" onclick="dmVideoCall()"><i class="fa-solid fa-video"></i></button>
+                        </div>
+                    </div>
+                    <div class="chat-body" id="chat-messages-container">
+                        <div class="chat-bubble them"><span id="chat-first-msg">İlk mesaj burada olacak</span></div>
+                    </div>
+                    <div class="chat-input-area" style="flex-direction:column; gap:8px;">
+                        <div style="display:flex; gap:12px; width:100%; padding:0 5px;">
+                            <button class="icon-btn" style="border:none; color:var(--gold); font-size:1.1rem; background:rgba(255,255,255,0.05);" onclick="startVoiceMsg(this)"><i class="fa-solid fa-microphone"></i></button>
+                            <button class="icon-btn" style="border:none; color:var(--gold); font-size:1.1rem; background:rgba(255,255,255,0.05);" onclick="sendPhoto(false)"><i class="fa-solid fa-image"></i></button>
+                            <button class="icon-btn" style="border:none; color:var(--red); font-size:1.1rem; background:rgba(255,255,255,0.05);" onclick="sendPhoto(true)"><i class="fa-solid fa-eye-slash"></i></button>
+                        </div>
+                        <div style="display:flex; width:100%; gap:10px;">
+                            <div class="chat-input-wrapper">
+                                <input type="text" id="chat-input-box" class="chat-input" placeholder="Type a message...">
+                            </div>
+                            <button class="chat-send-btn" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BAN SCREEN -->
+            <div id="ban-screen" class="screen overlay-screen hidden" style="z-index: 1000; background: #0f172a; flex-direction: column; justify-content: center; align-items: center; padding: 30px; text-align: center;">
+                <i class="fa-solid fa-gavel" style="font-size: 4rem; color: #ef4444; margin-bottom: 20px;"></i>
+                <h2 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 15px; color:white;">Hesabın Kısıtlandı!</h2>
+                <button class="btn-gold" onclick="resetMockStats()" style="background:transparent; color:white; border:1px solid white;">Test Sıfırlama</button>
+            </div>
+            <div class="lv-pattern"></div>
+        </div>
+
+        <!-- BOTTOM NAV -->
+        <nav class="bottom-nav" id="main-nav">
+            <div class="nav-item" data-target="rooms-screen"><i class="fa-solid fa-users"></i></div>
+            <div class="nav-item" data-target="menu-screen"><i class="fa-solid fa-gamepad"></i></div>
+            <div class="nav-item brand-logo active" data-target="home-screen" style="font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.8rem;">Ø</div>
+            <div class="nav-item" data-target="messages-screen"><i class="fa-solid fa-envelope"></i><span class="notification-dot"></span></div>
+            <div class="nav-item" data-target="profile-screen"><i class="fa-solid fa-user"></i></div>
+        </nav>
+        
+        <!-- AVATAR MODAL -->
+        <div id="avatar-modal" class="modal-overlay hidden">
+            <div class="modal-box">
+                <h3>Karakterini Seç</h3>
+                <div class="avatar-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; max-height: 300px; overflow-y: auto; padding: 5px;">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Felix" onclick="selectAvatar(this, 'Felix')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Aneka" onclick="selectAvatar(this, 'Aneka')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Max" onclick="selectAvatar(this, 'Max')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Luna" onclick="selectAvatar(this, 'Luna')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Jack" onclick="selectAvatar(this, 'Jack')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Maya" onclick="selectAvatar(this, 'Maya')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Leo" onclick="selectAvatar(this, 'Leo')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Zoe" onclick="selectAvatar(this, 'Zoe')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Toby" onclick="selectAvatar(this, 'Toby')">
+                    <img class="avatar-opt" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Bella" onclick="selectAvatar(this, 'Bella')">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
+                    <button class="btn-gold" style="background:transparent; color:#888;" onclick="closeAvatarModal()">İptal</button>
+                    <button class="btn-gold" style="padding:10px 20px;" onclick="saveAvatar()">Kaydet</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- GOLD STORE MODAL -->
+        <div id="gold-store-modal" class="modal-overlay hidden" style="z-index:9000;">
+            <div class="modal-box text-center">
+                <div style="font-size:3rem; color:var(--gold); margin-bottom:15px;"><i class="fa-solid fa-gem"></i></div>
+                <h3 style="margin-bottom:20px;">Altın Paketleri</h3>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button class="btn-gold" style="background:#f1f2f6; color:#222; border:1px solid #dfe6e9;" onclick="buyGold(10)">🪙 10 Altın Al</button>
+                    <button class="btn-gold" style="background:#f1f2f6; color:#222; border:1px solid #dfe6e9;" onclick="buyGold(20)">🪙 20 Altın Al</button>
+                    <button class="btn-gold" style="background:#f1f2f6; color:#222; border:1px solid #dfe6e9;" onclick="buyGold(50)">🪙 50 Altın Al</button>
+                    <button class="btn-gold" onclick="buyGold(999999)">👑 Sınırsız Paket (Demo)</button>
+                </div>
+                <button style="margin-top:20px; border:none; background:transparent; color:#777; cursor:pointer; font-weight:bold;" onclick="closeGoldStore()">Kapat</button>
+            </div>
+        </div>
+
+        <!-- LEGAL MODAL -->
+        <div id="legal-modal" class="modal-overlay hidden" style="z-index:9000;">
+            <div class="modal-box" style="height: 70vh; display:flex; flex-direction:column; padding:0;">
+                <h3 style="padding:20px; border-bottom:1px solid #eee; text-align:center;">KVKK ve Yasal Haklar</h3>
+                <div style="overflow-y:auto; padding:20px; font-size:0.8rem; line-height:1.6; color:#555;">
+                    <p><strong>1. Veri Sorumlusu:</strong> Blind ID Clone Ekibi.</p>
+                    <p><strong>2. İşlenen Veriler:</strong> Kullanıcı adı, yaş, boy, kilo (isteğe bağlı) ve bölge bilgileriniz eşleşme algoritması ve profil oluşturma amacıyla işlenir.</p>
+                    <p><strong>3. Veri Güvenliği:</strong> Sesli görüşmeleriniz WebRTC protokolü ile uçtan uca şifrelenir ve tarafımızca kesinlikle kaydedilmez.</p>
+                    <p><strong>4. Kullanıcı Hakları:</strong> İstediğiniz zaman hesabınızı silebilir ve verilerinizin yok edilmesini talep edebilirsiniz.</p>
+                    <p><strong>5. Davranış Kuralları:</strong> Küfür, hakaret ve taciz içerikli görüşmeler sonucunda hesabınız kalıcı olarak kapatılabilir.</p>
+                </div>
+                <button class="btn-gold" style="margin:20px;" onclick="document.getElementById('legal-modal').classList.add('hidden')">Anladım</button>
+            </div>
+        </div>
+            <!-- PRIVATE CALL OVERLAY (WhatsApp Style) -->
+            <div id="private-call-screen" class="screen overlay-screen hidden" style="background: #111; z-index: 10000; flex-direction: column;">
+                <div class="call-header" style="background: transparent; padding: 40px 20px;">
+                    <img id="pcall-avatar" src="" style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid var(--gold); margin-bottom: 15px;">
+                    <h2 id="pcall-username" style="color: white; font-size: 1.5rem; margin-bottom: 5px;">Kullanıcı</h2>
+                    <div id="pcall-status" style="color: var(--gold); font-weight: 700;">Aranıyor...</div>
+                </div>
+
+                <div id="pcall-video-container" class="hidden" style="flex: 1; position: relative; width: 100%; background: #000;">
+                    <video id="pcall-remote-video" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+                    <video id="pcall-local-video" autoplay playsinline muted style="position: absolute; top: 20px; right: 20px; width: 100px; height: 150px; border-radius: 10px; border: 2px solid white; object-fit: cover; z-index: 10;"></video>
+                </div>
+
+                <div class="call-footer" style="padding: 40px; display: flex; justify-content: center; gap: 30px; background: rgba(0,0,0,0.5);">
+                    <button class="circle-btn" onclick="togglePCallMute(this)" style="background: rgba(255,255,255,0.1);"><i class="fa-solid fa-microphone"></i></button>
+                    <button class="circle-btn btn-reject" onclick="hangupPrivateCall()" style="width: 70px; height: 70px; font-size: 1.8rem;"><i class="fa-solid fa-phone-slash"></i></button>
+                    <button id="pcall-video-toggle" class="circle-btn" onclick="togglePCallVideo(this)" style="background: rgba(255,255,255,0.1);"><i class="fa-solid fa-video"></i></button>
+                </div>
+            </div>
+
+            <!-- INCOMING CALL MODAL -->
+            <div id="incoming-call-modal" class="modal-overlay hidden" style="z-index: 11000; background: rgba(0,0,0,0.9);">
+                <div class="modal-box text-center" style="background: #1e272e; color: white;">
+                    <img id="incall-p-avatar" src="" style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--gold); margin-bottom: 20px;">
+                    <h3 id="incall-p-username" style="margin-bottom: 5px;">Biri Arıyor</h3>
+                    <p id="incall-p-type" style="color: var(--gold); font-weight: 800; margin-bottom: 30px;">Görüntülü Arama...</p>
+                    <div style="display: flex; gap: 20px; justify-content: center;">
+                        <button class="circle-btn btn-reject" onclick="rejectPrivateCall()"><i class="fa-solid fa-xmark"></i></button>
+                        <button class="circle-btn btn-accept" onclick="acceptPrivateCall()"><i class="fa-solid fa-check"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VISUAL SEARCH OVERLAY -->
+            <div id="visual-search-overlay" class="screen overlay-screen hidden" style="background: rgba(0,0,0,0.95); flex-direction: column; justify-content: center; align-items: center; z-index: 12000;">
+                <div class="scanner-ring"></div>
+                <div id="scan-status-text" style="color: var(--gold); font-size: 1.5rem; font-weight: 800; margin-top: 30px; letter-spacing: 2px;">TARANIYOR...</div>
+                <div id="scan-log-text" style="color: #666; font-family: monospace; font-size: 0.7rem; margin-top: 20px; max-width: 80%; text-align: center;">Initializing deep scan...</div>
+            </div>
+
+            <style>
+                .scanner-ring {
+                    width: 200px; height: 200px; border: 4px solid var(--gold); border-radius: 50%; border-top-color: transparent;
+                    animation: spin 1s linear infinite; box-shadow: 0 0 50px var(--gold);
+                }
+                @keyframes spin { to { transform: rotate(360deg); } }
+            </style>
+
+            <style>
+                /* Text and images within ephemeral bubbles are harder to copy */
+                .chat-bubble img {
+                    -webkit-user-select: none;
+                    -khtml-user-select: none;
+                    -moz-user-select: none;
+                    -o-user-select: none;
+                    user-select: none;
+                    pointer-events: none;
+                }
+            </style>
+        </div>
+        
+        <!-- WebRTC Remote Audio Player -->
+        <audio id="remote-audio" autoplay></audio>
+        <!-- Arama Sesi -->
+        <audio id="dial-ringing" src="https://assets.mixkit.co/sfx/preview/mixkit-vintage-telephone-ringtone-1356.mp3" loop></audio>
+
+        <!-- Script Dependencies -->
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <script src="webrtc_client.js"></script>
+        <script src="game_engine.js"></script>
+        <script src="app.js"></script>
+    </div>
+</body>
+</html>
