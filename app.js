@@ -106,12 +106,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('recent-matches-container');
         if (!container) return;
         container.innerHTML = '';
-        if (currentUser.history.length === 0) {
-            container.innerHTML = `<span style="font-size:0.75rem; color:#666;">Son eşleşme yok.</span>`;
+
+        const validHistory = (currentUser.history || []).filter(h => h.name && h.name !== 'Anonim');
+        
+        if (validHistory.length === 0) {
+            container.style.display = 'none';
             return;
         }
+        container.style.display = 'flex';
 
-        currentUser.history.slice(-3).forEach(h => {
+        validHistory.slice(-3).forEach(h => {
             container.innerHTML += `
             <div class="history-item" onclick="premiumAlert('Geçmiş eşleşmeye tekrar bağlanmak VIP özelliğidir.')">
                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${h.name}&backgroundColor=111">
@@ -236,6 +240,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.goBack = function () {
+        // If an overlay is open, close it first
+        const activeOverlay = overlayScreens.find(s => s && s.classList.contains('active'));
+        if (activeOverlay) {
+            hideOverlays();
+            return;
+        }
+
         if (navHistory.length > 1) {
             navHistory.pop();
             const prevTabId = navHistory[navHistory.length - 1];
@@ -244,6 +255,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function showTab(targetId, isGoingBack = false) {
+        // Ensure overlays are closed when switching tabs
+        hideOverlays();
+
         const navItem = document.querySelector(`.nav-item[data-target="${targetId}"]`);
         if (!navItem) return;
 
