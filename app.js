@@ -66,36 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateProfileUI();
     }
 
-    function updateProfileUI() {
-        if (!currentUser) return;
-        const uText = document.getElementById('profile-username-text');
-        const bioText = document.getElementById('profile-bio-text');
-        const xpText = document.getElementById('user-xp');
-        const progressFill = document.getElementById('xp-fill');
-        const avatarImg = document.getElementById('user-avatar-img');
-
-        if (uText) uText.innerText = currentUser.username;
-        if (bioText) {
-            const age = currentUser.age || 'Gizli';
-            const ht = currentUser.height ? currentUser.height + 'cm' : 'Gizli';
-            const wt = currentUser.weight ? currentUser.weight + 'kg' : 'Gizli';
-            bioText.innerHTML = `Yaş: ${age} | Boy: ${ht} | Kilo: ${wt}<br>${currentUser.bio || 'Henüz bir bio eklenmemiş...'}`;
-        }
-
-        if (avatarImg) {
-            avatarImg.src = currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
-        }
-
-        // Level System
-        const currentXP = currentUser.xp || 0;
-        const level = Math.floor(currentXP / 1000) + 1;
-        const xpInLevel = currentXP % 1000;
-
-        if (document.getElementById('user-level')) document.getElementById('user-level').innerText = level;
-        if (xpText) xpText.innerText = xpInLevel;
-        if (progressFill) progressFill.style.width = `${(xpInLevel / 1000) * 100}%`;
-    }
-
     window.addXP = function (amt) {
         currentUser.xp = (currentUser.xp || 0) + amt;
         saveUser();
@@ -955,6 +925,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const heightText = document.getElementById('profile-height-text');
         const weightText = document.getElementById('profile-weight-text');
         const regionText = document.getElementById('profile-region-text');
+        const xpText = document.getElementById('user-xp');
+        const progressFill = document.getElementById('xp-fill');
         const avatarImg = document.getElementById('user-avatar-img');
 
         if (uText) uText.innerText = currentUser.username;
@@ -970,6 +942,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
             };
         }
+
+        // Level System
+        const currentXP = currentUser.xp || 0;
+        const level = Math.floor(currentXP / 1000) + 1;
+        const xpInLevel = currentXP % 1000;
+
+        if (document.getElementById('user-level')) document.getElementById('user-level').innerText = level;
+        if (xpText) xpText.innerText = xpInLevel;
+        if (progressFill) progressFill.style.width = `${(xpInLevel / 1000) * 100}%`;
     }
     window.updateProfileUI = updateProfileUI;
     // ---- REPORT & RATINGS ----
