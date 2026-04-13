@@ -62,6 +62,9 @@ class AudioChatClient {
             targetId: this.targetId,
             sdp: offer
         });
+        
+        // Başlangıçta sessiz (Onay bekleniyor)
+        this.setMute(true);
     }
 
     _initSocketListeners() {
@@ -88,6 +91,9 @@ class AudioChatClient {
                 targetId: this.targetId,
                 sdp: answer
             });
+
+            // Başlangıçta sessiz (Onay bekleniyor)
+            this.setMute(true);
         });
 
         this.socket.on("webrtc_answer", async (data) => {
@@ -143,12 +149,26 @@ class AudioChatClient {
         };
     }
 
+    setMute(isMuted) {
+        if (this.localStream) {
+            this.localStream.getAudioTracks().forEach(track => {
+                track.enabled = !isMuted;
+            });
+            console.log(`🎤 Mikrofon Durumu: ${isMuted ? 'SUSTURULDU' : 'AKTİF'}`);
+            // Diğer tarafa sinyal gönder
+            if (this.targetId) {
+                this.socket.emit("mic_status_change", { targetId: this.targetId, isMuted });
+            }
+        }
+    }
+
     toggleMute() {
         if (this.localStream) {
             const audioTrack = this.localStream.getAudioTracks()[0];
             if (audioTrack) {
-                audioTrack.enabled = !audioTrack.enabled;
-                return audioTrack.enabled;
+                const newState = !audioTrack.enabled;
+                this.setMute(!newState); // State is inverted in logic
+                return newState;
             }
         }
         return false;

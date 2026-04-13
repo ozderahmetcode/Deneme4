@@ -307,15 +307,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlayScreens = [document.getElementById('matching-screen'), document.getElementById('incall-screen'), document.getElementById('rating-screen'), document.getElementById('room-inner-screen'), document.getElementById('active-chat-screen'), document.getElementById('game-matching-screen'), document.getElementById('game-screen')];
     function showOverlay(screenToShow) {
         overlayScreens.forEach(screen => {
-            if (screen) { screen.classList.remove('active'); setTimeout(() => { if (!screen.classList.contains('active')) screen.classList.add('hidden'); }, 300); }
+            if (screen) {
+                screen.classList.remove('active');
+                screen.classList.add('hidden');
+            }
         });
         if (screenToShow) {
             if (mainNav) mainNav.style.display = 'none';
-            // Rating ekranı açıldığında yüzdeleri güncelle
             if (screenToShow.id === 'rating-screen') {
                 updateRatingDisplay();
             }
-            setTimeout(() => { screenToShow.classList.remove('hidden'); setTimeout(() => { screenToShow.classList.add('active'); }, 10); }, 300);
+            screenToShow.classList.remove('hidden');
+            // Force reflow for transition
+            void screenToShow.offsetWidth;
+            screenToShow.classList.add('active');
         } else {
             if (mainNav && !stats.banStatus && currentUser) mainNav.style.display = 'flex';
         }
@@ -363,6 +368,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }, () => {
             console.log("🔔 Bağlantı Sinyali Alındı! Sayaç başlıyor.");
             startGlobalTimer(120, 'active-countdown');
+        });
+
+        globalSocket.on('mic_status_change', (data) => {
+            console.log("🎙️ Karşı taraf mikrofon durumu:", data.isMuted ? 'Kapalı' : 'Açık');
+            const micIcon = document.getElementById('opp-mic-status');
+            if (micIcon) {
+                micIcon.style.color = data.isMuted ? 'var(--red)' : 'var(--green)';
+                micIcon.className = data.isMuted ? 'fa-solid fa-microphone-slash' : 'fa-solid fa-microphone';
+            }
         });
 
         roomClient = new RoomAudioClient(globalSocket, document.getElementById('audio-container'), {
@@ -701,6 +715,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 avatarEl.onerror = function() { this.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=fallback'; };
             }
 
+            // Başlangıçta mutlaka SESSİZ (Mute) başla
+            if (webrtcClient) webrtcClient.setMute(true);
+
+            // Karşı mikrofon ikonunu sıfırla
+            const micIcon = document.getElementById('opp-mic-status');
+            if (micIcon) {
+                micIcon.style.color = 'var(--red)';
+                micIcon.className = 'fa-solid fa-microphone-slash';
+            }
+
             console.log("⏳ Bağlantı bekleniyor... Sayaç onConnect ile başlayacak.");
         }
 
@@ -719,13 +743,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('call-accept-btn')?.addEventListener('click', async () => {
-            // "Onayla" butonu - Bağı kurar, süreyi dondurabilir veya arkadaşlık isteği atabilir
             const btn = document.getElementById('call-accept-btn');
             btn.style.color = 'var(--green)';
             btn.innerHTML = '<i class="fa-solid fa-heart"></i>';
-            alert("Bağlantı Onaylandı! Harika gidiyorsun.");
-            // webrtcClient zaten globalde tanımlı ve hazır.
-            const ok = await webrtcClient.requestMicrophone();
+            
+            // Mikrofonu aç (Zorunlu onay sonrası ses iletimi)
+            if (webrtcClient) webrtcClient.setMute(false);
+            
+            alert("Bağlantı Onaylandı! Karşı taraf da onayladığında sesleriniz iletilecek.");
         });
 
 
