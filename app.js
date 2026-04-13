@@ -2246,19 +2246,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
             } catch (e) { console.log("Chart Error:", e); }
-                                backgroundColor: ['#BA945B', '#444', '#ff4757'],
-                                borderWidth: 0,
-                                cutout: '75%',
-                                borderRadius: 10
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } }
-                        }
-                    });
-                }
 
                 const gaugeCtx = document.getElementById('completionGaugeChart');
                 if (gaugeCtx) {
