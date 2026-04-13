@@ -394,24 +394,24 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         // --- PARTICIPANTS LOGIC ---
-        let activeRoomParticipants = [];
-
-
+        window.activeRoomParticipants = [];
 
         window.updateParticipantsUI = function () {
             const countEl = document.getElementById('room-users-count');
             const listContainer = document.getElementById('participants-container');
             const gridContainer = document.getElementById('room-participants-grid');
 
-            if (countEl) countEl.innerText = activeRoomParticipants.length;
+            const participants = window.activeRoomParticipants || [];
+
+            if (countEl) countEl.innerText = participants.length;
 
             // Update Side List (Standard)
             if (listContainer) {
                 listContainer.innerHTML = '';
-                if (activeRoomParticipants.length === 0) {
+                if (participants.length === 0) {
                     listContainer.innerHTML = '<div style="padding:10px; font-size:0.7rem; color:#aaa; text-align:center;">Kimse yok.</div>';
                 } else {
-                    activeRoomParticipants.forEach(p => {
+                    participants.forEach(p => {
                         const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
                         listContainer.innerHTML += `
                             <div class="participant-item">
@@ -426,11 +426,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update Grid Layer (Premium)
             if (gridContainer) {
                 gridContainer.innerHTML = '';
-                activeRoomParticipants.forEach(p => {
+                participants.forEach(p => {
                     const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
                     gridContainer.innerHTML += `
                         <div style="text-align:center;">
-                            <img src="${avatar}" class="speaker-avatar-${p.id}" style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}; transition: all 0.3s;">
+                            <img src="${avatar}" class="speaker-avatar-${p.id}" style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}; transition: all 0.3s;" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}'">
                             <div style="font-size:0.6rem; color:white; margin-top:5px; max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.username}</div>
                         </div>
                     `;
