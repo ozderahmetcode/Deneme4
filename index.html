@@ -507,8 +507,8 @@
                                 class="fa-solid fa-user"></i> <span>Profil</span></button>
                         <button id="p-tab-quests" class="p-tab-btn" onclick="switchProfileTab('quests')"><i
                                 class="fa-solid fa-bullseye"></i> <span>Görevler</span></button>
-                        <button id="p-tab-stats" class="p-tab-btn" onclick="switchProfileTab('stats')"><i
-                                class="fa-solid fa-chart-line"></i> <span>Denge</span></button>
+                        <button id="p-tab-friends" class="p-tab-btn" onclick="switchProfileTab('friends')"><i
+                                class="fa-solid fa-user-group"></i> <span>Arkadaşlar</span></button>
                     </div>
 
                     <!-- TAB: GENEL -->
@@ -619,8 +619,6 @@
                                     <div class="mpct">SANİYE BAŞINA</div>
                                     <div class="mbar"><div class="mbar-fill" style="width:100%; opacity:0.3; background:#00d2ff"></div></div>
                                 </div>
-
-                                <!-- Report Analysis -->
                                 <div class="metric-card-v3 neon-red">
                                     <div class="mlbl">RAPORLANMA ORANI</div>
                                     <div class="mval" id="stat-report-rate">%0.0</div>
@@ -628,8 +626,6 @@
                                     <div class="mbar"><div class="mbar-fill" id="stat-report-bar" style="background:var(--red)"></div></div>
                                 </div>
                             </div>
-
-                            <!-- Technical Charts Row -->
                             <div class="tech-charts-row">
                                 <div class="tech-card">
                                     <div class="tech-card-header">AKTİVİTE TRENDİ</div>
@@ -640,7 +636,7 @@
                                     <div class="canvas-box"><canvas id="interactionMixChart"></canvas></div>
                                 </div>
                                 <div class="tech-card">
-                                    <div class="tech-card-header">HAFTALIK TAMAMLAMA</div>
+                                    <div class="tech-card-header">GÖRÜŞME VERİMLİLİĞİ</div>
                                     <div class="canvas-box"><canvas id="completionGaugeChart"></canvas></div>
                                 </div>
                             </div>
@@ -1293,6 +1289,39 @@
                         class="fa-solid fa-xmark"></i></button>
                 <button class="circle-btn btn-accept" onclick="acceptPrivateCall()"><i
                         class="fa-solid fa-check"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW USER MODAL (For Friends) -->
+    <div id="view-user-modal" class="modal-overlay hidden">
+        <div class="modal-box user-profile-card">
+            <div class="card-close" onclick="closeModal('view-user-modal')">&times;</div>
+            <div class="user-card-header">
+                <div class="user-card-avatar-wrap">
+                    <img id="v-user-avatar" src="" alt="">
+                    <div class="online-dot"></div>
+                </div>
+                <h3 id="v-user-name">Kullanıcı Adı</h3>
+                <p id="v-user-tag">@premium_member</p>
+            </div>
+            <div class="user-card-stats">
+                <div class="u-stat">
+                    <span class="u-label">GÜVEN SKORU</span>
+                    <span class="u-value" id="v-user-trust">98%</span>
+                </div>
+                <div class="u-stat">
+                    <span class="u-label">SEVİYE</span>
+                    <span class="u-value" id="v-user-level">LV 12</span>
+                </div>
+            </div>
+            <div class="user-card-actions">
+                <button class="primary-btn add-friend-btn" id="v-add-friend-btn" onclick="handleAddFriendAction()">
+                    <i class="fa-solid fa-user-plus"></i> Arkadaş Ekle
+                </button>
+                <button class="secondary-btn" onclick="startDirectMessageFromModal()">
+                    <i class="fa-solid fa-paper-plane"></i> Mesaj Gönder
+                </button>
             </div>
         </div>
     </div>

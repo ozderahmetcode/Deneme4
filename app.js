@@ -452,7 +452,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
                     gridContainer.innerHTML += `
                         <div style="text-align:center;">
-                            <img src="${avatar}" class="speaker-avatar-${p.id}" style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}; transition: all 0.3s;" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}'">
+                            <img src="${avatar}" class="speaker-avatar-${p.id}" 
+                                 onclick="window.openUserPreview('${p.username}', '${p.id}', '${avatar}')"
+                                 onclick="openUserPreview('${p.username}', '${p.id}', '${avatar}')"
+                                 style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}; cursor:pointer; transition: all 0.3s;" 
+                                 onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}'">
                             <div style="font-size:0.6rem; color:white; margin-top:5px; max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.username}</div>
                         </div>
                     `;
@@ -1762,6 +1766,100 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tabName === 'stats') {
                 setTimeout(() => updateStatsUI(), 100);
             }
+            if (tabName === 'friends') {
+                renderFriendsList();
+            }
+        }
+
+        // --- FRIENDS SYSTEM LOGIC ---
+        let previewUser = null;
+
+        window.openUserPreview = function(username, socketId, avatar) {
+            if (username === currentUser.username) return; // Kendini önizleme
+            previewUser = { username, socketId, avatar };
+            
+            document.getElementById('v-user-name').innerText = username;
+            document.getElementById('v-user-avatar').src = avatar;
+            document.getElementById('v-user-trust').innerText = `${75 + Math.floor(Math.random() * 25)}%`;
+            document.getElementById('v-user-level').innerText = `LV ${1 + Math.floor(Math.random() * 15)}`;
+            
+            const addBtn = document.getElementById('v-add-friend-btn');
+            const isAlreadyFriend = currentUser.friends.some(f => f.username === username);
+            
+            if (isAlreadyFriend) {
+                addBtn.innerHTML = '<i class="fa-solid fa-check"></i> Arkadaşsınız';
+                addBtn.disabled = true;
+                addBtn.style.opacity = "0.6";
+            } else {
+                addBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Arkadaş Ekle';
+                addBtn.disabled = false;
+                addBtn.style.opacity = "1";
+            }
+            
+            openModal('view-user-modal');
+        }
+
+        window.handleAddFriendAction = function() {
+            if (!previewUser) return;
+            const isAlreadyFriend = currentUser.friends.some(f => f.username === previewUser.username);
+            if (!isAlreadyFriend) {
+                currentUser.friends.push({
+                    username: previewUser.username,
+                    avatar: previewUser.avatar,
+                    trust: document.getElementById('v-user-trust').innerText
+                });
+                localStorage.setItem('' + currentUser.username + '_friends', JSON.stringify(currentUser.friends));
+                alert(previewUser.username + ' arkadaş listene eklendi!');
+                closeModal('view-user-modal');
+                renderFriendsList();
+            }
+        }
+
+        window.removeFriend = function(username) {
+            if (confirm(username + ' arkadaş listenden silinsin mi?')) {
+                currentUser.friends = currentUser.friends.filter(f => f.username !== username);
+                localStorage.setItem('' + currentUser.username + '_friends', JSON.stringify(currentUser.friends));
+                renderFriendsList();
+            }
+        }
+
+        window.startDirectMessageFromModal = function() {
+            if (!previewUser) return;
+            closeModal('view-user-modal');
+            switchMainTab('messages');
+            // Burada o kullanıcıyla chat başlatma mantığı eklenebilir
+        }
+
+        function renderFriendsList() {
+            const list = document.getElementById('friends-list');
+            const count = document.getElementById('friends-count');
+            if (!list) return;
+            
+            list.innerHTML = '';
+            count.innerText = currentUser.friends.length;
+            
+            if (currentUser.friends.length === 0) {
+                list.innerHTML = '<div style="text-align:center; padding:50px; color:#555; font-size:0.7rem;">Henüz kimseyi eklemedin.</div>';
+                return;
+            }
+            
+            currentUser.friends.forEach(f => {
+                list.innerHTML += `
+                    <div class="friend-card-premium">
+                        <div class="f-info">
+                            <img src="${f.avatar}" class="f-avatar">
+                            <div>
+                                <div class="f-name">${f.username}</div>
+                                <div class="f-trust"><i class="fa-solid fa-shield-halved"></i> Güven: ${f.trust || '98%'}</div>
+                            </div>
+                        </div>
+                        <div class="f-actions">
+                            <button class="f-btn dm" onclick="switchMainTab('messages')" title="Mesaj Gönder"><i class="fa-solid fa-paper-plane"></i></button>
+                            <button class="f-btn delete" onclick="removeFriend('${f.username}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
         }
 
         // --- DAILY QUESTS SYSTEM (Restored & Enhanced) ---
