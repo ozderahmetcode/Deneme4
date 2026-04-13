@@ -1126,24 +1126,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.onParticipants(users);
                 });
 
-                this.socket.on('webrtc_signal', async (data) => {
-                    const { from, signal } = data;
-                    if (signal.type === 'offer') {
-                        await this.handleOffer(from, signal);
-                    } else if (signal.type === 'answer') {
-                        if (this.peers[from]) await this.peers[from].setRemoteDescription(new RTCSessionDescription(signal));
-                    } else if (signal.candidate) {
-                        if (this.peers[from]) await this.peers[from].addIceCandidate(new RTCIceCandidate(signal));
+                // --- Room Specific Signaling (Matches server.js) ---
+                this.socket.on('room_webrtc_offer', async (data) => {
+                    const { senderId, sdp } = data;
+                    await this.handleOffer(senderId, sdp);
+                });
+
+                this.socket.on('room_webrtc_answer', async (data) => {
+                    const { senderId, sdp } = data;
+                    if (this.peers[senderId]) {
+                        await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(sdp));
                     }
                 });
 
-                this.socket.on('user_joined_room', async (user) => {
+                this.socket.on('room_webrtc_ice_candidate', async (data) => {
+                    const { senderId, candidate } = data;
+                    if (this.peers[senderId]) {
+                        await this.peers[senderId].addIceCandidate(new RTCIceCandidate(candidate));
+                    }
+                });
+
+                this.socket.on('room_user_joined', async (user) => {
                     if (user.id !== this.socket.id) {
+                        console.log(`User joined: ${user.username} (${user.id})`);
                         await this.initiateCall(user.id);
                     }
                 });
 
-                this.socket.on('user_left_room', (userId) => {
+                this.socket.on('room_user_left', (data) => {
+                    const userId = data.id;
                     if (this.peers[userId]) {
                         this.peers[userId].close();
                         delete this.peers[userId];
@@ -1162,7 +1173,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const pc = this.createPeer(targetId);
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            this.socket.emit('webrtc_signal', { targetId, signal: offer });
+            this.socket.emit('room_webrtc_offer', { targetId, sdp: offer });
         }
 
         async handleOffer(from, offer) {
@@ -1170,14 +1181,15 @@ document.addEventListener('DOMContentLoaded', () => {
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            this.socket.emit('webrtc_signal', { targetId: from, signal: answer });
+            this.socket.emit('room_webrtc_answer', { targetId: from, sdp: answer });
         }
 
         createPeer(targetId) {
             const pc = new RTCPeerConnection({ 
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
                 ] 
             });
             this.peers[targetId] = pc;
@@ -1188,7 +1200,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
-                    this.socket.emit('webrtc_signal', { targetId, signal: event.candidate });
+                    this.socket.emit('room_webrtc_ice_candidate', { targetId, candidate: event.candidate });
                 }
             };
 
@@ -1228,10 +1240,15 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let id in this.peers) this.peers[id].close();
             this.peers = {};
             this.socket.emit('leave_room', { roomId: this.roomId });
+            
+            // Clean up listeners
             this.socket.off('room_participants');
-            this.socket.off('webrtc_signal');
-            this.socket.off('user_joined_room');
-            this.socket.off('user_left_room');
+            this.socket.off('room_webrtc_offer');
+            this.socket.off('room_webrtc_answer');
+            this.socket.off('room_webrtc_ice_candidate');
+            this.socket.off('room_user_joined');
+            this.socket.off('room_user_left');
+            
             window.activeRoomParticipants = [];
             window.activeRoomId = null;
         }
@@ -1376,18 +1393,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Oda UI callback'lerini tanımla (RoomAudioClient'e geçirilecek)
         const onParticipants = (users) => {
-            activeRoomParticipants = users;
+            window.activeRoomParticipants = users;
             updateParticipantsUI();
         };
         const onUserJoined = (user) => {
-            if (!activeRoomParticipants.find(u => u.id === user.id)) {
-                activeRoomParticipants.push(user);
-                updateParticipantsUI();
-            }
+            // Already handled by RoomAudioClient inner listeners
         };
         const onUserLeft = (data) => {
-            activeRoomParticipants = activeRoomParticipants.filter(u => u.id !== data.id);
-            updateParticipantsUI();
+            // Already handled by RoomAudioClient inner listeners
         };
 
         if (!noVoice) {
