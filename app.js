@@ -325,7 +325,14 @@ document.addEventListener('DOMContentLoaded', () => {
             void screenToShow.offsetWidth;
             screenToShow.classList.add('active');
         } else {
-            if (mainNav && !stats.banStatus && currentUser) mainNav.style.display = 'flex';
+            if (mainNav && !stats.banStatus && currentUser) {
+                mainNav.style.display = 'flex';
+                // Navigasyon kilitlenmesini önlemek için: Eğer hiçbir tab aktif görünmüyorsa Home'u zorla göster
+                const activeTab = allScreens.find(s => s && s.classList.contains('active'));
+                if (!activeTab) {
+                    showTab('home-screen');
+                }
+            }
         }
     }
     window.showOverlay = showOverlay; // Global access fix
@@ -885,14 +892,14 @@ document.addEventListener('DOMContentLoaded', () => {
             stats.likes++;
             saveStats();
             alert("Geri bildiriminiz için teşekkürler! Harika bir eşleşmeydi. 😊");
-            hideOverlays();
+            showTab('home-screen'); // Ana ekrana ve aktif navigasyona dön
         }
 
         window.rateDislike = function () {
             stats.skips++;
             saveStats();
             alert("Üzüldük ama bir dahaki sefere daha iyisini bulacağız! 🤝");
-            hideOverlays();
+            showTab('home-screen'); // Ana ekrana ve aktif navigasyona dön
         }
 
         window.addFriend = function () {
@@ -1566,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', () => {
             activeGame = null;
             clearInterval(gameTimer);
             hideOverlays();
-            location.reload(); // Clean state
+            showTab('home-screen');
         }
 
         // ---- GOLD STORE ----
@@ -1919,7 +1926,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stats.callsDone++;
             alert("Beğenin kaydedildi! Teşekkürler.");
             saveStats();
-            hideOverlays();
+            showTab('home-screen');
         }
 
         window.rateDislike = function() {
@@ -1927,6 +1934,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Geri bildirimin için teşekkürler.");
             saveStats();
             hideOverlays();
+            showTab('home-screen');
         }
 
         window.addFriendInCall = function() {
@@ -1960,7 +1968,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         window.skipRating = function() {
-            hideOverlays();
+            showTab('home-screen');
         }
 
         window.submitReport = function() {
