@@ -340,6 +340,51 @@ body, html {
     color: #444;
 }
 
+/* ROOM PARTICIPANTS GRID (FLEX) */
+.room-listeners {
+    display: flex !important;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
+    padding: 10px;
+    min-height: 90px;
+}
+
+.participant-avatar-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 65px;
+    gap: 6px;
+    transition: all 0.3s ease;
+}
+
+.participant-avatar-wrap img {
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    object-fit: cover;
+    background: var(--bg-lite);
+}
+
+.participant-avatar-wrap .participant-name {
+    font-size: 0.7rem;
+    color: var(--white);
+    font-weight: 700;
+    max-width: 65px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.9;
+}
+
+.participant-avatar-wrap:hover {
+    transform: translateY(-3px);
+}
+
 /* Modal Fixes (Image 4) */
 .profile-edit-body {
     max-height: 80vh;

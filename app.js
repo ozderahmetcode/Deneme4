@@ -1432,12 +1432,10 @@ document.addEventListener('DOMContentLoaded', () => {
             participants.forEach(user => {
                 const wrap = document.createElement('div');
                 wrap.className = 'participant-avatar-wrap';
-                wrap.style.textAlign = 'center';
                 wrap.innerHTML = `
-                <img src="${user.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + user.username}" 
-                     style="width:40px; height:40px; border-radius:50%; border:2px solid #BA945B;">
-                <div style="font-size:0.5rem; color:#fff; margin-top:4px; max-width:40px; overflow:hidden; text-overflow:ellipsis;">${user.username}</div>
-            `;
+                    <img src="${user.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + user.username}" alt="${user.username}">
+                    <div class="participant-name">${user.username}</div>
+                `;
                 grid.appendChild(wrap);
             });
         }
