@@ -310,6 +310,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (screenToShow) {
             if (mainNav) mainNav.style.display = 'none';
+            // Rating ekranı açıldığında yüzdeleri güncelle
+            if (screenToShow.id === 'rating-screen') {
+                updateRatingDisplay();
+            }
             setTimeout(() => { screenToShow.classList.remove('hidden'); setTimeout(() => { screenToShow.classList.add('active'); }, 10); }, 300);
         } else {
             if (mainNav && !stats.banStatus && currentUser) mainNav.style.display = 'flex';
@@ -798,10 +802,66 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUser.history.push({ name: opponentName, duration: talkedDuration });
         saveUser(); renderHistory();
 
-        const outcome = Math.random();
-        if (outcome < 0.6) stats.likes++; else if (outcome < 0.9) stats.skips++; else stats.reports++;
+        updateRatingDisplay();
         saveStats();
     }
+
+    function updateRatingDisplay() {
+        const total = (stats.likes || 0) + (stats.skips || 0);
+        const likePct = total === 0 ? 0 : Math.round((stats.likes / total) * 100);
+        const dislikePct = total === 0 ? 0 : Math.round((stats.skips / total) * 100);
+
+        const lpEl = document.getElementById('rating-like-pct');
+        const dpEl = document.getElementById('rating-dislike-pct');
+        if (lpEl) lpEl.innerText = `%${likePct}`;
+        if (dpEl) dpEl.innerText = `%${dislikePct}`;
+    }
+
+    window.rateLike = function () {
+        stats.likes++;
+        saveStats();
+        alert("Geri bildiriminiz için teşekkürler! Harika bir eşleşmeydi. 😊");
+        hideOverlays();
+    }
+
+    window.rateDislike = function () {
+        stats.skips++;
+        saveStats();
+        alert("Üzüldük ama bir dahaki sefere daha iyisini bulacağız! 🤝");
+        hideOverlays();
+    }
+
+    window.addFriend = function () {
+        alert("Arkadaşlık isteği gönderildi! Profilden takip edebilirsin.");
+    }
+
+    window.showReportOptions = function () {
+        const modal = document.getElementById('report-modal');
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    window.closeReportOptions = function () {
+        const modal = document.getElementById('report-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    window.submitReport = function (reason) {
+        stats.reports++;
+        saveStats();
+        alert(`Raporunuz iletildi: "${reason}". Teşekkürler.`);
+        closeReportOptions();
+        hideOverlays();
+    }
+
+    // Call Again & Skip listeners
+    document.getElementById('call-again-btn')?.addEventListener('click', () => {
+        hideOverlays();
+        document.getElementById('start-call-btn')?.click();
+    });
+
+    document.getElementById('skip-rating-btn')?.addEventListener('click', () => {
+        hideOverlays();
+    });
 
     function stopGlobalTimer() {
         clearInterval(activeTimerInterval);
