@@ -876,7 +876,7 @@
             <svg width="150" height="150">
                 <circle class="progress-ring__circle" stroke-width="6" fill="transparent" r="70" cx="75" cy="75" />
             </svg>
-            <div class="time-left" id="active-countdown" style="font-size:2.5rem;">120</div>
+            <div class="time-left" id="active-countdown" style="font-size:2rem; font-weight:800;">Bağlanıyor...</div>
         </div>
 
         <div
@@ -1393,6 +1393,24 @@
     <script src="webrtc_client.js"></script>
     <script src="game_engine.js"></script>
     <script src="app.js"></script>
+
+    <!-- FRIEND REQUEST MODAL (CENTERED) -->
+    <div id="friend-request-modal" class="modal-overlay hidden">
+        <div class="modal-content premium-card" style="text-align:center;">
+            <div class="modal-header">
+                <h3 style="color:var(--primary);">Arkadaşlık İsteği</h3>
+                <button class="close-btn" onclick="document.getElementById('friend-request-modal').classList.add('hidden')">&times;</button>
+            </div>
+            <div id="friend-req-info" style="margin-bottom:20px;">
+                <img id="friend-req-avatar" src="" style="width:80px; height:80px; border-radius:50%; border:3px solid var(--gold); margin-bottom:15px; background:#f0f0f0;">
+                <div id="friend-req-text" style="color:#333; font-weight:700; font-size:1.1rem; line-height:1.4;">Bir kullanıcı seni arkadaş olarak eklemek istiyor.</div>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+                <button class="btn-gold" id="accept-friend-btn" style="flex:1; padding:15px; border-radius:15px;">Kabul Et</button>
+                <button class="btn-secondary" onclick="document.getElementById('friend-request-modal').classList.add('hidden')" style="flex:1; padding:15px; border-radius:15px; background:#f5f5f5; color:#666; border:none;">Reddet</button>
+            </div>
+        </div>
+    </div>
 
 </body>
 

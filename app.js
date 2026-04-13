@@ -345,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- CALL TIMERS & MATCHING (WEBRTC INTEGRATION) ----
     let matchingInterval, activeTimerInterval, globalTimeLeft = 0, currentCallStart = 0;
+    let localConfirmed = false, remoteConfirmed = false;
     let opponentName = "Anonim";
     let webrtcClient = null;
     let roomClient = null; // Mesh Room Audio
@@ -377,8 +378,54 @@ document.addEventListener('DOMContentLoaded', () => {
             stopGlobalTimer();
             showOverlay(document.getElementById('rating-screen'));
         }, () => {
-            console.log("🔔 Bağlantı Sinyali Alındı! Sayaç başlıyor.");
-            startGlobalTimer(120, 'active-countdown');
+            console.log("🔔 WebRTC Bağlantı Sinyali Alındı.");
+            // Sayaç burada başlamıyor, karşılıklı onay (Confirmed) bekliyoruz
+        });
+
+        // Karşılıklı Onay Sinyali
+        globalSocket.on('call_confirmed', (data) => {
+            console.log("❤️ Karşı taraf görüşmeyi onayladı!");
+            remoteConfirmed = true;
+            checkMutualConfirmation();
+        });
+
+        // Arkadaşlık İsteği Sinyali
+        globalSocket.on('friend_request', (data) => {
+            console.log("🤝 Yeni arkadaşlık isteği:", data.senderName);
+            const modal = document.getElementById('friend-request-modal');
+            const avatar = document.getElementById('friend-req-avatar');
+            const text = document.getElementById('friend-req-text');
+            const acceptBtn = document.getElementById('accept-friend-btn');
+
+            if (modal && avatar && text && acceptBtn) {
+                avatar.src = data.senderAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.senderName}`;
+                text.innerText = `${data.senderName} seni arkadaş olarak eklemek istiyor.`;
+                
+                acceptBtn.onclick = () => {
+                    globalSocket.emit('friend_request_accepted', { targetId: data.senderId, senderName: currentUser.username });
+                    modal.classList.add('hidden');
+                    // Listeye ekle
+                    if (!currentUser.friends) currentUser.friends = [];
+                    const already = currentUser.friends.some(f => f.username === data.senderName);
+                    if (!already) {
+                        currentUser.friends.push({ username: data.senderName, avatar: avatar.src, trust: '98%' });
+                        saveUser();
+                        alert(`${data.senderName} ile artık arkadaşsınız!`);
+                    }
+                };
+                modal.classList.remove('hidden');
+            }
+        });
+
+        globalSocket.on('friend_request_accepted', (data) => {
+            alert(`🎉 ${data.senderName} arkadaşlık isteğini kabul etti!`);
+            if (!currentUser.friends) currentUser.friends = [];
+            const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.senderName}`;
+            const already = currentUser.friends.some(f => f.username === data.senderName);
+            if (!already) {
+                currentUser.friends.push({ username: data.senderName, avatar, trust: '98%' });
+                saveUser();
+            }
         });
 
         globalSocket.on('mic_status_change', (data) => {
@@ -726,8 +773,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 avatarEl.onerror = function() { this.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=fallback'; };
             }
 
-            // Başlangıçta mutlaka SESSİZ (Mute) başla
-            if (webrtcClient) webrtcClient.setMute(true);
+            // Başlangıçta Sesleri OTOMATİK AÇ
+            if (webrtcClient) webrtcClient.setMute(false);
+
+            localConfirmed = false;
+            remoteConfirmed = false;
+            const countdownEl = document.getElementById('active-countdown');
+            if (countdownEl) countdownEl.innerText = "Bekleniyor...";
 
             // Karşı mikrofon ikonunu sıfırla
             const micIcon = document.getElementById('opp-mic-status');
@@ -758,11 +810,20 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.style.color = 'var(--green)';
             btn.innerHTML = '<i class="fa-solid fa-heart"></i>';
             
-            // Mikrofonu aç (Zorunlu onay sonrası ses iletimi)
-            if (webrtcClient) webrtcClient.setMute(false);
+            localConfirmed = true;
+            if (globalSocket && webrtcClient && webrtcClient.targetId) {
+                globalSocket.emit('call_confirmed', { targetId: webrtcClient.targetId });
+            }
             
-            alert("Bağlantı Onaylandı! Karşı taraf da onayladığında sesleriniz iletilecek.");
+            checkMutualConfirmation();
         });
+
+        function checkMutualConfirmation() {
+            if (localConfirmed && remoteConfirmed) {
+                console.log("✅ Karşılıklı onay sağlandı! Sayaç başlıyor.");
+                startGlobalTimer(120, 'active-countdown');
+            }
+        }
 
 
         document.getElementById('start-call-btn')?.addEventListener('click', async () => {
@@ -1924,37 +1985,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
         window.rateLike = function() {
             stats.callsDone++;
-            alert("Beğenin kaydedildi! Teşekkürler.");
             saveStats();
             showTab('home-screen');
         }
 
         window.rateDislike = function() {
             stats.callsDone++;
-            alert("Geri bildirimin için teşekkürler.");
             saveStats();
-            hideOverlays();
             showTab('home-screen');
         }
 
         window.addFriendInCall = function() {
-            if (!lastMatchData) return;
+            if (!lastMatchData || !webrtcClient || !webrtcClient.targetId) return;
             const oppName = lastMatchData.oppUsername || 'Gizli';
             const oppAvatar = lastMatchData.oppAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${oppName}`;
             
             const isAlreadyFriend = currentUser.friends.some(f => f.username === oppName);
-            if (!isAlreadyFriend) {
-                currentUser.friends.push({
-                    username: oppName,
-                    avatar: oppAvatar,
-                    trust: '98%'
-                });
-                localStorage.setItem('' + currentUser.username + '_friends', JSON.stringify(currentUser.friends));
-                alert(oppName + ' arkadaş listene eklendi!');
-                renderFriendsList();
-            } else {
-                alert("Bu kişi zaten arkadaş listende.");
+            if (isAlreadyFriend) {
+                alert("Bu kişi zaten arkadaş listenizde.");
+                return;
             }
+
+            globalSocket.emit('friend_request', { 
+                targetId: webrtcClient.targetId, 
+                senderName: currentUser.username,
+                senderAvatar: currentUser.avatarUrl
+            });
+            alert("Arkadaşlık isteği gönderildi! Karşı tarafın onaylaması bekleniyor.");
         }
 
         window.reconnectCallVip = function() {
