@@ -158,16 +158,14 @@ io.on('connection', (socket) => {
             
             // 1. Temel Kontroller
             if (w.socketId === socket.id) continue;
-            if (data.isTroll !== w.isTroll) continue;
+            // if (data.isTroll !== w.isTroll) continue; // Troll kısıtlamasını şimdilik kaldırdık
 
-            // 2. Cinsiyet & Tercih Uyumlu mu? (Gelişmiş Mantık)
+            // 2. Cinsiyet & Tercih Uyumlu mu?
             let genderOk = false;
             
-            // Eğer ben 'mixed' isem veya o 'mixed' ise -> OK
             if (pref === 'mixed' || w.preference === 'mixed') {
                 genderOk = true;
             } else {
-                // Spesifik tercih: Benim tercihim onun cinsiyetiyle, onun tercihi benim cinsiyetimle uymalı
                 const iMatchHim = (pref === w.gender);
                 const heMatchesMe = (w.preference === myGender);
                 if (iMatchHim && heMatchesMe) genderOk = true;
@@ -180,11 +178,14 @@ io.on('connection', (socket) => {
 
             // 3. Bölge & VIP Filtreleri
             let regionOk = (myRegion === w.region);
+            // VIP şehir tercihlerini şimdilik "tercih" seviyesinde tutuyoruz
+            /*
             if (isVip && targetCity && targetCity !== "ALL" && w.region !== targetCity) regionOk = false;
             if (w.isVip && w.targetCity && w.targetCity !== "ALL" && myRegion !== w.targetCity) regionOk = false;
+            */
 
             if (!regionOk) {
-                console.log(`   - ⏳ Bölge uyumsuz: ${w.username}`);
+                console.log(`   - ⏳ Bölge uyumsuz (Faz 1 skipped): ${w.username}`);
                 continue;
             }
 
@@ -192,19 +193,20 @@ io.on('connection', (socket) => {
             break;
         }
 
-        // Phase 2: Kısıtlamaları Kaldır (Kritik: Tercihleri esneterek eşleşmeyi zorla)
+        // Phase 2: Kısıtlamaları Kaldır (Catch-All)
         if (matchIdx < 0) {
-            console.log(`🔄 Faz 2: Kısıtlamalar kaldırılıyor...`);
+            console.log(`🔄 Faz 2: Kısıtlamalar kaldırılıyor (Catch-All). Havuzdaki kişi sayısı: ${waitingPool.length}`);
             for (let i = 0; i < waitingPool.length; i++) {
                 const w = waitingPool[i];
                 if (w.socketId === socket.id) continue;
-                if (data.isTroll !== w.isTroll) continue;
                 
-                // Faz 2'de cinsiyet tercihlerini daha esnek tutuyoruz
+                // Faz 2'de bekleyen ilk kişi ile eşleşmeyi zorla
+                console.log(`🎯 Faz 2 eşleşmesi bulundu: ${w.username}`);
                 matchIdx = i;
                 break;
             }
         }
+
 
         if (matchIdx >= 0) {
             const oppData = waitingPool.splice(matchIdx, 1)[0];
