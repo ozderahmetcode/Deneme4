@@ -160,44 +160,49 @@ io.on('connection', (socket) => {
             if (w.socketId === socket.id) continue;
             if (data.isTroll !== w.isTroll) continue;
 
-            // 2. Cinsiyet & Tercih Uyumlu mu?
-            const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
+            // 2. Cinsiyet & Tercih Uyumlu mu? (Gelişmiş Mantık)
+            let genderOk = false;
+            
+            // Eğer ben 'mixed' isem veya o 'mixed' ise -> OK
+            if (pref === 'mixed' || w.preference === 'mixed') {
+                genderOk = true;
+            } else {
+                // Spesifik tercih: Benim tercihim onun cinsiyetiyle, onun tercihi benim cinsiyetimle uymalı
+                const iMatchHim = (pref === w.gender);
+                const heMatchesMe = (w.preference === myGender);
+                if (iMatchHim && heMatchesMe) genderOk = true;
+            }
+
             if (!genderOk) {
-                console.log(`   - ❌ Cinsiyet uyuşmuyor: ${w.username}`);
+                console.log(`   - ❌ Cinsiyet/Tercih uyuşmuyor: ${w.username}`);
                 continue;
             }
 
             // 3. Bölge & VIP Filtreleri
-            // Phase 1: Mükemmel Eşleşme (Aynı bölge veya VIP ise hedef şehir)
             let regionOk = (myRegion === w.region);
-            
-            // VIP Özel Filtre Uygula
             if (isVip && targetCity && targetCity !== "ALL" && w.region !== targetCity) regionOk = false;
             if (w.isVip && w.targetCity && w.targetCity !== "ALL" && myRegion !== w.targetCity) regionOk = false;
 
             if (!regionOk) {
-                console.log(`   - ⏳ Bölge uyumsuz (Faz 2'ye kalabilir): ${w.username}`);
+                console.log(`   - ⏳ Bölge uyumsuz: ${w.username}`);
                 continue;
             }
 
-            // Eğer buraya geldiyse eşleşme bulundu
             matchIdx = i;
             break;
         }
 
-        // Phase 2: Kısıtlamaları Kaldır (Eğer ilk turda kimse bulunamadıysa)
+        // Phase 2: Kısıtlamaları Kaldır (Kritik: Tercihleri esneterek eşleşmeyi zorla)
         if (matchIdx < 0) {
-            console.log(`🔄 Faz 2: Bölge kısıtlamaları kaldırılıyor...`);
+            console.log(`🔄 Faz 2: Kısıtlamalar kaldırılıyor...`);
             for (let i = 0; i < waitingPool.length; i++) {
                 const w = waitingPool[i];
                 if (w.socketId === socket.id) continue;
                 if (data.isTroll !== w.isTroll) continue;
-
-                const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
-                if (genderOk) {
-                    matchIdx = i;
-                    break;
-                }
+                
+                // Faz 2'de cinsiyet tercihlerini daha esnek tutuyoruz
+                matchIdx = i;
+                break;
             }
         }
 
@@ -223,24 +228,20 @@ io.on('connection', (socket) => {
         } else {
             // KUYRUĞA EKLE
             const payload = {
-                socketId: socket.id, 
-                userId_db, 
-                username, 
-                avatarUrl, 
-                gender: myGender, 
-                region: myRegion,
-                isVip: isVip,
-                isTroll: data.isTroll || false,
-                preference: pref,
-                targetCity: targetCity || "ALL",
-                ageRange: ageRange || "ALL",
+                socketId: socket.id, userId_db, username, avatarUrl, 
+                gender: myGender, region: myRegion, isVip: isVip,
+                isTroll: data.isTroll || false, preference: pref,
+                targetCity: targetCity || "ALL", ageRange: ageRange || "ALL",
                 timestamp: Date.now()
             };
 
             if (isVip) waitingPool.unshift(payload);
             else waitingPool.push(payload);
             
-            socket.emit('searching', { msg: "Kuyrukta bekleme moduna geçildi, aranıyor..." });
+            socket.emit('searching', { 
+                msg: "Kuyrukta bekleyenler arasında taranıyor...", 
+                poolCount: waitingPool.length 
+            });
             console.log(`➕ Kuyruğa Eklendi: ${username} (Toplam: ${waitingPool.length})`);
         }
     });

@@ -865,8 +865,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         globalSocket.on('searching', (data) => {
             const statusText = document.getElementById('match-status-text');
-            if (statusText) statusText.innerText = data.msg || "Kullanıcılar aranıyor...";
+            if (statusText) {
+                let msg = data.msg || "Kullanıcılar aranıyor...";
+                if (data.poolCount !== undefined) {
+                    msg += `\n(Sıradaki kişi sayısı: ${data.poolCount})`;
+                }
+                statusText.innerText = msg;
+            }
         });
+Line: 863
 
         globalSocket.on('peer_disconnected', (data) => {
             console.log("☎️ Bağlantı koptu:", data.msg);
