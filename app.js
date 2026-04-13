@@ -24,7 +24,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let usersDB = JSON.parse(localStorage.getItem('blindIdUsers')) || {};
     let currentUser = JSON.parse(localStorage.getItem('blindIdSession')) || null;
     let liteMode = JSON.parse(localStorage.getItem('blindIdLiteMode')) || false;
+    let stats = JSON.parse(localStorage.getItem('blindIdStats')) || { totalCalls: 0, likes: 0, dislikes: 0, reports: 0, skips: 0, talkTimeSeconds: 0 };
     let statsChart = null;
+
+    function saveStats() {
+        localStorage.setItem('blindIdStats', JSON.stringify(stats));
+    }
 
     // Girişte izni sadece mikrofon için istiyoruz (Blind ID standardı)
     function requestPermissions() {
