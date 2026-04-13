@@ -430,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
                     gridContainer.innerHTML += `
                         <div style="text-align:center;">
-                            <img src="${avatar}" style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'};">
+                            <img src="${avatar}" class="speaker-avatar-${p.id}" style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}; transition: all 0.3s;">
                             <div style="font-size:0.6rem; color:white; margin-top:5px; max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.username}</div>
                         </div>
                     `;
@@ -1174,13 +1174,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         createPeer(targetId) {
-            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            const pc = new RTCPeerConnection({ 
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ] 
+            });
             this.peers[targetId] = pc;
 
-            this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream));
+            if (this.localStream) {
+                this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream));
+            }
 
             pc.onicecandidate = (event) => {
-                if (event.candidate) this.socket.emit('webrtc_signal', { targetId, signal: event.candidate });
+                if (event.candidate) {
+                    this.socket.emit('webrtc_signal', { targetId, signal: event.candidate });
+                }
             };
 
             pc.ontrack = (event) => {
@@ -1189,9 +1198,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     audio = document.createElement('audio');
                     audio.id = `audio-${targetId}`;
                     audio.autoplay = true;
+                    audio.playsInline = true; // For iOS/Mobile
+                    audio.volume = 1.0;
                     this.container.appendChild(audio);
                 }
                 audio.srcObject = event.streams[0];
+                console.log(`Audio track received from ${targetId}`);
+                
+                // Active speaker visual indicator
+                const gridItem = document.querySelector(`.speaker-avatar-${targetId}`);
+                if (gridItem) gridItem.classList.add('speaking-active');
+            };
+
+            pc.onconnectionstatechange = () => {
+                console.log(`Connection state with ${targetId}: ${pc.connectionState}`);
             };
 
             return pc;
@@ -1388,20 +1408,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         showOverlay(document.getElementById('room-inner-screen'));
-    }
-
-    function renderRoomParticipants() {
-        const grid = document.getElementById('room-participants-grid');
-        if (!grid || !window.currentRoomUsers) return;
-        grid.innerHTML = '';
-        window.currentRoomUsers.forEach(u => {
-            grid.innerHTML += `
-                <div class="speaker" style="text-align:center;">
-                    <img src="${u.avatarUrl}" style="width:50px; height:50px; border-radius:50%; border:2px solid var(--primary);">
-                    <div style="font-size:0.6rem; margin-top:5px; font-weight:bold;">${u.username.substring(0, 8)}</div>
-                </div>
-            `;
-        });
     }
 
     window.leaveRoom = function () {

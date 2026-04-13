@@ -656,3 +656,16 @@ canvas { box-shadow: 0 0 20px rgba(78, 84, 200, 0.3); background: #0f172a; }
     margin-top: 10px;
     margin-bottom: 5px;
 }
+
+/* SPEAKING PULSE EFFECTS */
+[class^="speaker-avatar-"].speaking-active {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 15px var(--gold);
+    animation: speakingBreath 1.5s infinite ease-in-out;
+}
+
+@keyframes speakingBreath {
+    0% { transform: scale(1); box-shadow: 0 0 5px var(--gold); }
+    50% { transform: scale(1.1); box-shadow: 0 0 20px var(--gold); }
+    100% { transform: scale(1); box-shadow: 0 0 5px var(--gold); }
+}
