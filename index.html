@@ -824,6 +824,7 @@
         style="justify-content: center; align-items: center;">
         <div class="avatar-container">
             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=111" alt="Avatar"
+                onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=avatar'"
                 class="avatar-img" id="match-avatar">
         </div>
         <h2 style="font-size: 1.4rem; font-weight: 800; margin-bottom: 5px;" id="match-username">Elite_User</h2>
@@ -844,9 +845,10 @@
     <div id="incall-screen" class="screen overlay-screen hidden">
         <div class="call-header">
             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=111" id="incall-avatar"
+                onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=avatar'"
                 style="width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--gold);">
             <h1
-                style="font-family: 'Playfair Display', serif; font-size: 3.5rem; letter-spacing: 5px; color: var(--gold);">
+                style="font-family: 'Playfair Display', serif; font-size: 3.5rem; letter-spacing: 5px; color: var(--gold); margin-bottom: 0;">
                 OZDER</h1>
             <h2 id="incall-username-text" style="color: white; font-size: 1.2rem; margin-top: 10px; font-weight: 800;">
                 Elite Kullanici</h2>
@@ -859,12 +861,19 @@
             <strong>Buz Kıran:</strong> <span id="ice-breaker-text">Sence en iyi pizza malzemesi nedir?</span>
         </div>
 
+        <div style="margin-top:20px;">
+            <button class="btn-gold" id="incall-add-friend" onclick="addFriendInCall()" 
+                    style="font-size:0.7rem; padding:8px 15px; border-radius:20px; background:rgba(255,255,255,0.05); border:1px solid rgba(186,148,91,0.5);">
+                <i class="fa-solid fa-user-plus"></i> Arkadaş Ekle
+            </button>
+        </div>
+
         <div
-            style="position: relative; width: 180px; height: 180px; display: flex; justify-content: center; align-items: center; margin-top: 30px;">
-            <svg width="180" height="180">
-                <circle class="progress-ring__circle" stroke-width="8" fill="transparent" r="84" cx="90" cy="90" />
+            style="position: relative; width: 150px; height: 150px; display: flex; justify-content: center; align-items: center; margin-top: 15px;">
+            <svg width="150" height="150">
+                <circle class="progress-ring__circle" stroke-width="6" fill="transparent" r="70" cx="75" cy="75" />
             </svg>
-            <div class="time-left" id="active-countdown">120</div>
+            <div class="time-left" id="active-countdown" style="font-size:2.5rem;">120</div>
         </div>
 
         <div
@@ -926,23 +935,23 @@
 
         <button class="btn-gold"
             style="width: 80%; background:var(--gold); color:var(--bg-dark); margin-bottom: 12px; border-radius: 30px; padding: 16px; font-weight: 900;"
-            onclick="addFriend()">
+            onclick="addFriendInCall()">
             <i class="fa-solid fa-user-plus"></i> Arkadaş Ekle
         </button>
 
         <button class="circle-btn"
             style="width:50px; height:50px; background:rgba(255,118,117,0.1); margin-bottom:15px; border: 1px solid rgba(255,118,117,0.2);"
-            onclick="showReportOptions()">
+            onclick="document.getElementById('report-modal').classList.remove('hidden')">
             <i class="fa-solid fa-flag" style="color:var(--red);"></i>
         </button>
 
         <button class="btn-gold"
             style="width: 80%; background:#1a1a1a; color:var(--gold); border:1px solid var(--gold); margin-bottom: 15px;"
-            id="call-again-btn">
+            onclick="reconnectCallVip()">
             <i class="fa-solid fa-phone"></i> Tekrar Bağlan (VIP)
         </button>
         <button style="background:transparent; border:none; color:#888; font-weight:700; cursor:pointer;"
-            id="skip-rating-btn">Geç</button>
+            onclick="skipRating()">Geç</button>
 
         <!-- REPORT MODAL -->
         <div id="report-modal" class="hidden"
@@ -956,7 +965,7 @@
                 onclick="submitReport('Küfür etti')">Küfür etti</button>
             <button
                 style="margin-top: 10px; padding: 15px; background:transparent; border:none; color:#a4b0be; font-weight:bold; cursor:pointer;"
-                onclick="closeReportOptions()">İptal</button>
+                onclick="document.getElementById('report-modal').classList.add('hidden')">İptal</button>
         </div>
     </div>
 

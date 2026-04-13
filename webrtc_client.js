@@ -18,6 +18,7 @@ class AudioChatClient {
         this.localStream = null;
         this.targetId = null;
         this.onHangUp = onHangUp;
+        this.onConnect = arguments[3] || null; // New Connect Callback
 
         this._initSocketListeners();
     }
@@ -137,6 +138,7 @@ class AudioChatClient {
             if (this.remoteAudio.srcObject !== event.streams[0]) {
                 this.remoteAudio.srcObject = event.streams[0];
                 this.remoteAudio.play().catch(e => console.log("Matching audio play error:", e));
+                if (this.onConnect) this.onConnect(); // Signal connection established
             }
         };
     }

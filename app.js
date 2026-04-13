@@ -357,8 +357,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Initialize WebRTC Clients (Global & Ready to listen)
         webrtcClient = new AudioChatClient(globalSocket, document.getElementById('remote-audio'), () => {
-            showOverlay(document.getElementById('rating-screen'));
+            console.log("☎️ Karşı taraf görüşmeyi sonlandırdı.");
             stopGlobalTimer();
+            showOverlay(document.getElementById('rating-screen'));
+        }, () => {
+            console.log("🔔 Bağlantı Sinyali Alındı! Sayaç başlıyor.");
+            startGlobalTimer(120, 'active-countdown');
         });
 
         roomClient = new RoomAudioClient(globalSocket, document.getElementById('audio-container'), {
@@ -591,7 +595,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const matchAvatar = document.getElementById('match-avatar');
             const matchUser = document.getElementById('match-username');
 
-            if (matchAvatar) matchAvatar.parentElement.style.display = 'block';
+            if (matchAvatar) {
+                matchAvatar.parentElement.style.display = 'block';
+                matchAvatar.src = data.oppAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.oppUsername || 'anon'}`;
+                matchAvatar.onerror = function() { this.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=fallback'; };
+            }
             if (matchUser) {
                 matchUser.style.display = 'block';
                 matchUser.innerText = "Gizli Kullanıcı"; // Veya data.username
@@ -647,7 +655,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (window.matchInterval) clearInterval(window.matchInterval);
             if (webrtcClient) webrtcClient.hangUp();
             hideOverlays();
-            location.reload();
         });
 
         async function enterInCall(data) {
@@ -689,16 +696,26 @@ document.addEventListener('DOMContentLoaded', () => {
             if (nameEl) nameEl.innerText = callInfo;
 
             const avatarEl = document.getElementById('incall-avatar');
-            if (avatarEl && data.oppAvatar) avatarEl.src = data.oppAvatar;
+            if (avatarEl) {
+                avatarEl.src = data.oppAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.oppUsername || 'anon'}`;
+                avatarEl.onerror = function() { this.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=fallback'; };
+            }
 
-            startGlobalTimer(120, 'active-countdown');
+            console.log("⏳ Bağlantı bekleniyor... Sayaç onConnect ile başlayacak.");
         }
 
         // --- GÖRÜŞME İÇİ KONTROLLER ---
         document.getElementById('call-skip-btn')?.addEventListener('click', () => {
             if (webrtcClient) webrtcClient.hangUp();
-            showOverlay(document.getElementById('rating-screen')); // Puanlama ekranına git
             stopGlobalTimer();
+            showOverlay(document.getElementById('rating-screen')); 
+        });
+
+        // Hangup button in in-call screen
+        document.getElementById('hangup-btn')?.addEventListener('click', () => {
+            if (webrtcClient) webrtcClient.hangUp();
+            stopGlobalTimer();
+            showOverlay(document.getElementById('rating-screen'));
         });
 
         document.getElementById('call-accept-btn')?.addEventListener('click', async () => {
@@ -1860,6 +1877,62 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 `;
             });
+        }
+
+        // --- RATING SCREEN FUNCTIONS ---
+
+        window.rateLike = function() {
+            stats.callsDone++;
+            alert("Beğenin kaydedildi! Teşekkürler.");
+            saveStats();
+            hideOverlays();
+        }
+
+        window.rateDislike = function() {
+            stats.callsDone++;
+            alert("Geri bildirimin için teşekkürler.");
+            saveStats();
+            hideOverlays();
+        }
+
+        window.addFriendInCall = function() {
+            if (!lastMatchData) return;
+            const oppName = lastMatchData.oppUsername || 'Gizli';
+            const oppAvatar = lastMatchData.oppAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${oppName}`;
+            
+            const isAlreadyFriend = currentUser.friends.some(f => f.username === oppName);
+            if (!isAlreadyFriend) {
+                currentUser.friends.push({
+                    username: oppName,
+                    avatar: oppAvatar,
+                    trust: '98%'
+                });
+                localStorage.setItem('' + currentUser.username + '_friends', JSON.stringify(currentUser.friends));
+                alert(oppName + ' arkadaş listene eklendi!');
+                renderFriendsList();
+            } else {
+                alert("Bu kişi zaten arkadaş listende.");
+            }
+        }
+
+        window.reconnectCallVip = function() {
+            if (!lastMatchData) {
+                alert("Yeniden bağlanacak kimse bulunamadı.");
+                return;
+            }
+            alert("VIP: " + (lastMatchData.oppUsername || 'Kullanıcı') + " ile tekrar bağlantı kuruluyor...");
+            hideOverlays();
+            enterInCall(lastMatchData);
+        }
+
+        window.skipRating = function() {
+            hideOverlays();
+        }
+
+        window.submitReport = function() {
+            alert("Raporun incelenmek üzere ekibe iletildi.");
+            document.getElementById('report-modal').classList.add('hidden');
+            hideOverlays();
         }
 
         // --- DAILY QUESTS SYSTEM (Restored & Enhanced) ---
