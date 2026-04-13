@@ -1143,7 +1143,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
     roomClient = null;
 
-    let roomMicMode = 'open'; // 'open' or 'ptt'
+    window.roomMicMode = 'open'; // 'open' or 'ptt'
+
+    window.toggleRoomMicMode = function () {
+        const btn = document.getElementById('room-mic-mode');
+        const pttBtn = document.getElementById('ptt-button');
+        const muteBtn = document.getElementById('room-mic-mute');
+
+        if (window.roomMicMode === 'open') {
+            window.roomMicMode = 'ptt';
+            btn.innerText = 'Mod: Bas-Konuş';
+            if (pttBtn) pttBtn.classList.remove('hidden');
+            if (muteBtn) muteBtn.classList.add('hidden');
+            // Hemen sustur
+            if (roomClient) roomClient.setMuteState(true);
+        } else {
+            window.roomMicMode = 'open';
+            btn.innerText = 'Mode: Open Mic';
+            if (pttBtn) pttBtn.classList.add('hidden');
+            if (muteBtn) muteBtn.classList.remove('hidden');
+            // Hemen aç
+            if (roomClient) roomClient.setMuteState(false);
+        }
+    }
+
+    // PTT Button Events
+    function initPTTListeners() {
+        const pttBtn = document.getElementById('ptt-button');
+        if (!pttBtn) return;
+
+        const startTalk = (e) => {
+            e.preventDefault();
+            if (window.roomMicMode !== 'ptt') return;
+            if (roomClient) {
+                roomClient.setMuteState(false);
+                pttBtn.style.background = 'var(--primary)';
+                pttBtn.innerHTML = '🎤 TALKING...';
+                pttBtn.style.boxShadow = '0 0 30px var(--primary)';
+            }
+        };
+
+        const stopTalk = (e) => {
+            e.preventDefault();
+            if (window.roomMicMode !== 'ptt') return;
+            if (roomClient) {
+                roomClient.setMuteState(true);
+                pttBtn.style.background = 'var(--gold)';
+                pttBtn.innerHTML = '🎤 HOLD TO TALK';
+                pttBtn.style.boxShadow = '0 5px 20px rgba(186, 148, 91, 0.3)';
+            }
+        };
+
+        pttBtn.addEventListener('mousedown', startTalk);
+        pttBtn.addEventListener('mouseup', stopTalk);
+        pttBtn.addEventListener('mouseleave', stopTalk);
+
+        pttBtn.addEventListener('touchstart', startTalk, { passive: false });
+        pttBtn.addEventListener('touchend', stopTalk, { passive: false });
+    }
 
     window.toggleMuteUI = function (btn) {
         if (!webrtcClient) return;
@@ -1297,6 +1354,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 onUserLeft
             });
             roomClient.join(roomId, { username: currentUser.username, avatarUrl: currentUser.avatarUrl, gold: currentUser.gold || 0 });
+            
+            // PTT Modunda ise başlangıçta sustur
+            setTimeout(() => {
+                if (window.roomMicMode === 'ptt' && roomClient) {
+                    roomClient.setMuteState(true);
+                }
+            }, 1000); // Tracklerin hazır olması için kısa bir bekleme
         } else {
             // Normal oda katılımı (Ses kapalıysa, örn: Radyo)
             globalSocket.emit('join_room', {
@@ -1923,5 +1987,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } // end window.io
 
     initApp();
+    initPTTListeners();
 });
 

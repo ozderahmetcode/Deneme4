@@ -302,6 +302,18 @@ class RoomAudioClient {
         this.localStream = null;
         this.roomId = null;
     }
+
+    setMuteState(isMuted) {
+        if (this.localStream) {
+            const audioTrack = this.localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !isMuted;
+                console.log(`🎙️ Mikrofon durumu güncellendi: ${isMuted ? 'SUSTURULDU' : 'AKTİF'}`);
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 class PrivateCallClient {
