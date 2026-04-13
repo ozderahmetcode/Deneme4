@@ -843,21 +843,16 @@
 
     <!-- IN CALL SCREEN -->
     <div id="incall-screen" class="screen overlay-screen hidden">
-        <div class="call-header">
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=111" id="incall-avatar"
+        <div class="top-info" style="display:flex; flex-direction:column; align-items:center; padding: 20px 0;">
+            <img class="incall-avatar" id="incall-avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=111" 
                 onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=avatar'"
-                style="width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--gold);">
-            <h1
-                style="font-family: 'Playfair Display', serif; font-size: 3.5rem; letter-spacing: 5px; color: var(--gold); margin-bottom: 0;">
-                OZDER</h1>
-            <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px;">
-                <h2 id="incall-username-text" style="color: white; font-size: 1.2rem; font-weight: 800; margin:0;">
-                    Elite Kullanici</h2>
-                <i id="opp-mic-status" class="fa-solid fa-microphone-slash" style="color:var(--red); font-size:1.1rem; filter: drop-shadow(0 0 5px rgba(255,255,255,0.2));" title="Karşı taraf henüz sesi onaylamadı"></i>
+                style="width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--gold); margin-bottom:15px; box-shadow: 0 10px 20px rgba(0,0,0,0.4);">
+            <div class="brand-name-small" style="font-size: 1.8rem; letter-spacing: 5px; color: var(--gold); font-weight: 800; text-transform:uppercase;">OZDER</div>
+            <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:5px;">
+                <h2 id="incall-username-text" style="color: white; font-size: 1.1rem; font-weight: 800; margin:0;">Elite Kullanici</h2>
+                <i id="opp-mic-status" class="fa-solid fa-microphone-slash" style="color:var(--red); font-size:1rem;" title="Karşı taraf henüz sesi onaylamadı"></i>
             </div>
-            <p
-                style="font-family: 'Montserrat', sans-serif; font-weight: 700; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 2px;">
-                Elite Social Club</p>
+            <p style="font-family: 'Montserrat', sans-serif; font-weight: 700; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 2px; font-size: 0.65rem; margin-top: 5px;">Elite Social Club</p>
         </div>
 
         <div id="ice-breaker-box" class="ice-breaker-box hidden">

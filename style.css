@@ -364,6 +364,33 @@ body, html {
     transition: all 0.3s ease;
 }
 
+.participant-avat.incall-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid var(--gold);
+    margin: 0 auto 15px auto;
+    object-fit: cover;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+
+.brand-name-small {
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.incall-screen .top-area {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+}
+
 .participant-avatar-wrap img {
     width: 55px;
     height: 55px;

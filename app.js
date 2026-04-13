@@ -949,23 +949,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        window.rateLike = function () {
-            stats.likes++;
-            saveStats();
-            alert("Geri bildiriminiz için teşekkürler! Harika bir eşleşmeydi. 😊");
-            showTab('home-screen'); // Ana ekrana ve aktif navigasyona dön
-        }
-
-        window.rateDislike = function () {
-            stats.skips++;
-            saveStats();
-            alert("Üzüldük ama bir dahaki sefere daha iyisini bulacağız! 🤝");
-            showTab('home-screen'); // Ana ekrana ve aktif navigasyona dön
-        }
-
-        window.addFriend = function () {
-            alert("Arkadaşlık isteği gönderildi! Profilden takip edebilirsin.");
-        }
 
         window.showReportOptions = function () {
             const modal = document.getElementById('report-modal');
