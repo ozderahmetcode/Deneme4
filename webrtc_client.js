@@ -17,34 +17,16 @@ class AudioChatClient {
         this.peerConnection = null;
         this.localStream = null;
         this.targetId = null;
-        this.onHangUp = onHangUp; // UI'yı güncellemek için callback
+        this.onHangUp = onHangUp;
 
-        // Bütün dinleyicileri (Listener) hazır beklet
         this._initSocketListeners();
     }
 
-    /**
-     * Blueprint Kuralı: İzni eşleşmeye girildiğinde İSTE!
-     */
     async requestMicrophone() {
         try {
-            if (this.localStream && this.localStream.active) {
-                console.log("🎤 Mevcut mikrofon yayını kullanılıyor.");
-                return true;
-            }
-
-            console.log("🎤 Yeni mikrofon izni alınıyor...");
-            if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert("HATA: Tarayıcınız mikrofonu engelledi.");
-                return false;
-            }
+            if (this.localStream && this.localStream.active) return true;
             this.localStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                },
-                video: false
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
             });
             return true;
         } catch (err) {
@@ -54,93 +36,76 @@ class AudioChatClient {
         }
     }
 
-    /**
-     * Eşleşme sağlandığında bağlantıyı kurar (Arayan Taraf = Caller)
-     */
     async startCall(opponentId) {
         this.targetId = opponentId;
         this._createPeerConnection();
 
-        // 1. Kendi sesimizi bağlantıya ekliyoruz
-        this.localStream.getTracks().forEach(track => {
-            this.peerConnection.addTrack(track, this.localStream);
-        });
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => {
+                this.peerConnection.addTrack(track, this.localStream);
+            });
+        }
 
-        // 2. Teklif (Offer) oluştur ve yolla
         const offer = await this.peerConnection.createOffer();
         await this.peerConnection.setLocalDescription(offer);
         
         this.socket.emit("webrtc_offer", {
             targetId: this.targetId,
-            sdp: this.peerConnection.localDescription
+            sdp: offer
         });
     }
 
-    /**
-     * Sinyalleri dinleme noktası
-     */
     _initSocketListeners() {
-        // Karşıdan teklif geldiğinde (Aranan Taraf = Callee)
         this.socket.on("webrtc_offer", async (data) => {
-            console.log("📥 Gelen arama teklifi (Offer) alınıyor...");
+            console.log("📥 Gelen 1-on-1 arama teklifi (Matching Offer)");
             this.targetId = data.senderId;
             this._createPeerConnection();
 
-            this.localStream.getTracks().forEach(track => {
-                this.peerConnection.addTrack(track, this.localStream);
-            });
+            if (this.localStream) {
+                this.localStream.getTracks().forEach(track => {
+                    this.peerConnection.addTrack(track, this.localStream);
+                });
+            }
 
             await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            
-            // Cevap (Answer) oluştur ve yolla
             const answer = await this.peerConnection.createAnswer();
             await this.peerConnection.setLocalDescription(answer);
 
             this.socket.emit("webrtc_answer", {
                 targetId: this.targetId,
-                sdp: this.peerConnection.localDescription
+                sdp: answer
             });
         });
 
         this.socket.on("webrtc_answer", async (data) => {
-            console.log("📥 Karşı taraf teklifi (Answer) kabul etti.");
-            await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            if (this.targetId === data.senderId && this.peerConnection) {
+                await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            }
         });
 
         this.socket.on("webrtc_ice_candidate", async (data) => {
-            if (data.candidate && this.peerConnection) {
+            if (this.targetId === data.senderId && data.candidate && this.peerConnection) {
                 await this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
             }
         });
 
         this.socket.on("peer_disconnected", () => {
-            console.log("🔴 Karşı taraf aramayı kapattı.");
             this.hangUp();
-            if(this.onHangUp) this.onHangUp(); // UI'yı 'Puanlama' veya 'Ev' ekranına yolla
+            if(this.onHangUp) this.onHangUp();
         });
     }
 
-    /**
-     * WebRTC temel objesinin oluşturulması (Turn/Stun)
-     */
     _createPeerConnection() {
-        const rtcConfig = {
+        this.peerConnection = new RTCPeerConnection({
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun.services.mozilla.com' },
-                { urls: 'stun:stun.stunprotocol.org' }
-            ],
-            iceCandidatePoolSize: 10,
-            iceTransportPolicy: 'all'
-        };
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+        });
 
-        this.peerConnection = new RTCPeerConnection(rtcConfig);
-
-        // ICE Adayı bulunduğunda karşıya fırlat (Sinyalleşme üzerinden)
         this.peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
+            if (event.candidate && this.targetId) {
                 this.socket.emit("webrtc_ice_candidate", {
                     targetId: this.targetId,
                     candidate: event.candidate
@@ -148,63 +113,43 @@ class AudioChatClient {
             }
         };
 
-        // Karşı tarafın sesi geldiğinde HTML Audio objesine bağla
         this.peerConnection.ontrack = (event) => {
-            console.log("🎵 Karşı tarafın SES ALGISI (Stream) bağlandı!");
+            console.log("🎵 Matching: SES ALGISI bağlandı!");
             if (this.remoteAudio.srcObject !== event.streams[0]) {
                 this.remoteAudio.srcObject = event.streams[0];
-                this.remoteAudio.play();
+                this.remoteAudio.play().catch(e => console.log("Matching audio play error:", e));
             }
         };
     }
 
-    /**
-     * Sesi Kapat / Aç (Mute)
-     */
     toggleMute() {
         if (this.localStream) {
             const audioTrack = this.localStream.getAudioTracks()[0];
             if (audioTrack) {
                 audioTrack.enabled = !audioTrack.enabled;
-                return audioTrack.enabled; // Geriye yeni durumu dön (Açık mı?)
+                return audioTrack.enabled;
             }
         }
         return false;
     }
 
     hangUp() {
-        if (this.peerConnection) {
-            this.peerConnection.close();
-            this.peerConnection = null;
-        }
-        if (this.targetId) {
-            this.socket.emit("end_call", { targetId: this.targetId });
-            this.targetId = null;
-        }
-        if (this.localStream) {
-            this.localStream.getTracks().forEach(track => track.stop());
-            this.localStream = null;
-        }
-        if (this.remoteAudio) {
-            this.remoteAudio.srcObject = null;
-        }
+        if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
+        if (this.targetId) { this.socket.emit("end_call", { targetId: this.targetId }); this.targetId = null; }
+        if (this.localStream) { this.localStream.getTracks().forEach(track => track.stop()); this.localStream = null; }
+        if (this.remoteAudio) this.remoteAudio.srcObject = null;
     }
 }
 
-/**
- * 🏠 ROOM AUDIO CLIENT (Mesh Architecture)
- * - 10 kişiye kadar her kullanıcı birbiriyle doğrudan Peer bağ kurar.
- */
 class RoomAudioClient {
-    constructor(socket, containerElement, callbacks) {
+    constructor(socket, container, callbacks) {
         this.socket = socket;
-        this.container = containerElement; // Audio elementlerinin ekleneceği yer
-        this.peers = {}; // { socketId: RTCPeerConnection }
-        this.localStream = null;
+        this.container = container;
         this.roomId = null;
-        this.callbacks = callbacks || {}; // { onParticipants, onUserJoined, onUserLeft }
-        this._boundListeners = {}; // Temizlik için referansları tut
-
+        this.peers = {};
+        this.localStream = null;
+        this.callbacks = callbacks || {};
+        this._boundListeners = {};
         this._initSocketListeners();
     }
 
@@ -212,55 +157,54 @@ class RoomAudioClient {
         this.roomId = roomId;
         try {
             this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.socket.emit('join_room', { roomId, ...userData });
         } catch(e) {
             console.error("Oda mikrofon hatası:", e);
             alert("Odaya girmek için mikrofon izni vermelisiniz!");
-            return;
         }
-        this.socket.emit('join_room', { roomId, ...userData });
     }
 
     _initSocketListeners() {
-        // Her listener'ı bound reference olarak sakla ki leave'de temizleyebilelim
         this._boundListeners.onParticipants = (users) => {
-            users.forEach(user => {
-                this._createPeer(user.id, true); // Ben yeni geldim, teklif yollayacağım
-            });
-            if(this.callbacks.onParticipants) this.callbacks.onParticipants(users);
+            if (this.callbacks.onParticipants) this.callbacks.onParticipants(users);
         };
 
-        this._boundListeners.onUserJoined = (user) => {
-            this._createPeer(user.id, false); // O yeni geldi, teklifini bekleyeceğim
-            if(this.callbacks.onUserJoined) this.callbacks.onUserJoined(user);
+        this._boundListeners.onUserJoined = async (user) => {
+            if (user.id !== this.socket.id) {
+                console.log(`📡 Oda Girişi: ${user.username} - Arama başlatılıyor...`);
+                await this._initiateCall(user.id);
+                if (this.callbacks.onUserJoined) this.callbacks.onUserJoined(user);
+            }
         };
 
         this._boundListeners.onUserLeft = (data) => {
             this._removePeer(data.id);
-            if(this.callbacks.onUserLeft) this.callbacks.onUserLeft(data);
+            if (this.callbacks.onUserLeft) this.callbacks.onUserLeft(data);
         };
 
         this._boundListeners.onOffer = async (data) => {
-            if(!this.roomId) return;
-            const peer = this._getOrCreatePeer(data.senderId);
-            await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            const answer = await peer.createAnswer();
-            await peer.setLocalDescription(answer);
-            this.socket.emit('room_webrtc_answer', { targetId: data.senderId, sdp: peer.localDescription });
+            const { senderId, sdp } = data;
+            console.log(`📥 Oda Teklifi (Offer) geldi: ${senderId}`);
+            const pc = this._createPeer(senderId);
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            this.socket.emit('room_webrtc_answer', { targetId: senderId, sdp: answer });
         };
 
         this._boundListeners.onAnswer = async (data) => {
-            if(!this.roomId) return;
-            const peer = this.peers[data.senderId];
-            if(peer) await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            const { senderId, sdp } = data;
+            console.log(`📥 Oda Cevabı (Answer) geldi: ${senderId}`);
+            const pc = this.peers[senderId];
+            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp));
         };
 
         this._boundListeners.onIce = async (data) => {
-            if(!this.roomId) return;
-            const peer = this.peers[data.senderId];
-            if(peer) await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+            const { senderId, candidate } = data;
+            const pc = this.peers[senderId];
+            if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
         };
 
-        // Listener'ları kaydet
         this.socket.on('room_participants', this._boundListeners.onParticipants);
         this.socket.on('room_user_joined', this._boundListeners.onUserJoined);
         this.socket.on('room_user_left', this._boundListeners.onUserLeft);
@@ -269,31 +213,28 @@ class RoomAudioClient {
         this.socket.on('room_webrtc_ice_candidate', this._boundListeners.onIce);
     }
 
-    _removeSocketListeners() {
-        this.socket.off('room_participants', this._boundListeners.onParticipants);
-        this.socket.off('room_user_joined', this._boundListeners.onUserJoined);
-        this.socket.off('room_user_left', this._boundListeners.onUserLeft);
-        this.socket.off('room_webrtc_offer', this._boundListeners.onOffer);
-        this.socket.off('room_webrtc_answer', this._boundListeners.onAnswer);
-        this.socket.off('room_webrtc_ice_candidate', this._boundListeners.onIce);
+    async _initiateCall(targetId) {
+        const pc = this._createPeer(targetId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.socket.emit('room_webrtc_offer', { targetId, sdp: offer });
     }
 
-    _getOrCreatePeer(socketId) {
+    _createPeer(socketId) {
         if (this.peers[socketId]) return this.peers[socketId];
-        return this._createPeer(socketId, false);
-    }
 
-    _createPeer(socketId, isCaller) {
         const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
         });
-
         this.peers[socketId] = pc;
 
-        // Local stream ekle
-        this.localStream.getTracks().forEach(track => {
-            pc.addTrack(track, this.localStream);
-        });
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream));
+        }
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
@@ -302,23 +243,18 @@ class RoomAudioClient {
         };
 
         pc.ontrack = (event) => {
+            console.log(`🎵 Oda Sesi: ${socketId} bağlandı!`);
             let audioEl = document.getElementById(`audio-${socketId}`);
             if (!audioEl) {
                 audioEl = document.createElement('audio');
                 audioEl.id = `audio-${socketId}`;
                 audioEl.autoplay = true;
+                audioEl.setAttribute('playsinline', '');
                 this.container.appendChild(audioEl);
             }
             audioEl.srcObject = event.streams[0];
-            audioEl.play().catch(e => console.log("Oda sesi oynatma hatası:", e));
+            audioEl.play().catch(e => console.log("Room audio play error:", e));
         };
-
-        if (isCaller) {
-            pc.createOffer().then(offer => {
-                pc.setLocalDescription(offer);
-                this.socket.emit('room_webrtc_offer', { targetId: socketId, sdp: offer });
-            });
-        }
 
         return pc;
     }
@@ -332,14 +268,14 @@ class RoomAudioClient {
         if (el) el.remove();
     }
 
-    setMute(isMuted) {
-        if(this.localStream) {
-            this.localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
-        }
-    }
-
     leave() {
-        this._removeSocketListeners();
+        this.socket.off('room_participants', this._boundListeners.onParticipants);
+        this.socket.off('room_user_joined', this._boundListeners.onUserJoined);
+        this.socket.off('room_user_left', this._boundListeners.onUserLeft);
+        this.socket.off('room_webrtc_offer', this._boundListeners.onOffer);
+        this.socket.off('room_webrtc_answer', this._boundListeners.onAnswer);
+        this.socket.off('room_webrtc_ice_candidate', this._boundListeners.onIce);
+
         this.socket.emit('leave_room', { roomId: this.roomId });
         for (const id in this.peers) this._removePeer(id);
         if(this.localStream) this.localStream.getTracks().forEach(t => t.stop());
@@ -348,21 +284,16 @@ class RoomAudioClient {
     }
 }
 
-/**
- * 📞 PRIVATE CALL CLIENT (Audio & Video)
- * For direct DM calling (WhatsApp style)
- */
 class PrivateCallClient {
     constructor(socket, localVideoEl, remoteVideoEl, callbacks) {
         this.socket = socket;
         this.localVideo = localVideoEl;
         this.remoteVideo = remoteVideoEl;
-        this.callbacks = callbacks || {}; // { onHangup, onRemoteStream }
+        this.callbacks = callbacks || {};
         this.pc = null;
         this.localStream = null;
         this.targetId = null;
-        this.callType = 'audio'; // 'audio' or 'video'
-        
+        this.callType = 'audio';
         this._initListeners();
     }
 
@@ -381,101 +312,36 @@ class PrivateCallClient {
                 await this.pc.addIceCandidate(new RTCIceCandidate(signal));
             }
         });
-
-        this.socket.on('private_call_finished', () => {
-            this.stop(false);
-        });
-
-        this.socket.on('private_call_rejected', () => {
-            alert("Arama reddedildi.");
-            this.stop(false);
-        });
+        this.socket.on('private_call_finished', () => this.stop(false));
+        this.socket.on('private_call_rejected', () => { alert("Arama reddedildi."); this.stop(false); });
     }
 
     async start(targetId, type) {
         this.targetId = targetId;
         this.callType = type;
-        
         try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: type === 'video'
-            });
-            if(this.localVideo && type === 'video') {
-                this.localVideo.srcObject = this.localStream;
-                this.localVideo.play();
-            }
-        } catch(e) {
-            console.error("Kamera/Mikrofon izni alınamadı", e);
-            alert("Arama yapabilmek için gerekli izinleri vermelisiniz.");
-            return;
-        }
-
+            this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+            if(this.localVideo && type === 'video') { this.localVideo.srcObject = this.localStream; this.localVideo.play(); }
+        } catch(e) { alert("Arama için izin gereklidir."); return; }
         this._createPC();
-        
         const offer = await this.pc.createOffer();
         await this.pc.setLocalDescription(offer);
         this.socket.emit('private_call_signal', { targetId: this.targetId, signal: this.pc.localDescription });
     }
 
-    async accept(targetId, type) {
-        this.targetId = targetId;
-        this.callType = type;
-        
-        try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: type === 'video'
-            });
-            if(this.localVideo && type === 'video') {
-                this.localVideo.srcObject = this.localStream;
-                this.localVideo.play();
-            }
-        } catch(e) {
-            console.error("Kamera/Mikrofon hatası", e);
-            return;
-        }
-
-        this._createPC();
-    }
-
     _createPC() {
-        this.pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-        });
-
-        this.localStream.getTracks().forEach(track => {
-            this.pc.addTrack(track, this.localStream);
-        });
-
-        this.pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                this.socket.emit('private_call_signal', { targetId: this.targetId, signal: event.candidate });
-            }
-        };
-
+        this.pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        this.localStream.getTracks().forEach(track => this.pc.addTrack(track, this.localStream));
+        this.pc.onicecandidate = (event) => { if (event.candidate) this.socket.emit('private_call_signal', { targetId: this.targetId, signal: event.candidate }); };
         this.pc.ontrack = (event) => {
-            if(this.remoteVideo) {
-                this.remoteVideo.srcObject = event.streams[0];
-                this.remoteVideo.play().catch(e => console.log("Video oynatma hatası:", e));
-            }
-            if(this.callbacks.onRemoteStream) this.callbacks.onRemoteStream(event.streams[0]);
+            if(this.remoteVideo) { this.remoteVideo.srcObject = event.streams[0]; this.remoteVideo.play().catch(e => console.log(e)); }
         };
     }
 
     stop(notify = true) {
-        if(notify && this.targetId) {
-            this.socket.emit('private_call_hangup', { targetId: this.targetId });
-        }
-        if(this.pc) {
-            this.pc.close();
-            this.pc = null;
-        }
-        if(this.localStream) {
-            this.localStream.getTracks().forEach(t => t.stop());
-            this.localStream = null;
-        }
-        if(this.localVideo) this.localVideo.srcObject = null;
+        if(notify && this.targetId) this.socket.emit('private_call_hangup', { targetId: this.targetId });
+        if(this.pc) this.pc.close();
+        if(this.localStream) this.localStream.getTracks().forEach(t => t.stop());
         if(this.remoteVideo) this.remoteVideo.srcObject = null;
         this.targetId = null;
         if(this.callbacks.onHangup) this.callbacks.onHangup();
