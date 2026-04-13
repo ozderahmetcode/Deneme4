@@ -10,11 +10,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('./'));
 
-// Redis Matchmaking Setup
-const { createClient } = require('redis');
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-redis.on('error', (err) => console.error('Redis Error:', err));
-redis.connect().then(() => console.log("🔥 Matchmaking Engine (Redis) Hazır!"));
+app.use(express.static('./'));
 
 // ==================== ROOM DEFINITIONS ====================
 const roomDefs = {
@@ -130,52 +126,67 @@ io.on('connection', (socket) => {
     socket.emit('receive_rooms_info', getRoomsData());
     socket.emit('games_info_update', getGamesData());
     socket.on('find_match', async (data) => {
-        // data: { gender, region, preference ('opposite'|'mixed'), userId_db, isVip, karma }
-        const { userId_db, isVip, karma, username, avatarUrl } = data;
+        // data: { gender, region, preference, targetCity, ageRange, userId_db, isVip, karma, username, avatarUrl }
+        const { userId_db, isVip, karma, username, avatarUrl, ageRange, targetCity } = data;
         const myGender = data.gender || 'erkek';
-        const myRegion = data.region || '';
+        const myRegion = data.region || 'Bilinmiyor';
         const pref = data.preference || 'opposite';
-        const regionFilter = data.regionFilter || false;
 
-        console.log(`⏳ Arama: ${username} (VIP:${isVip}, Karma:${karma})`);
+        console.log(`⏳ Arama: ${username} (VIP:${isVip}, Karma:${karma}) [Local Engine]`);
 
-        // 1. Mandatory Region for Non-VIPs / Troll Pool Control
-        let cityId = "ALL";
-        
+        // 1. Temizlik: Kullanıcı zaten kuyruktaysa çıkar
+        waitingPool = waitingPool.filter(w => w.socketId !== socket.id);
+
+        // 2. Troll Pool Control
         if (karma < 50) {
-            cityId = "TROLL_POOL";
-        } else if (!isVip) {
-            // Normal kullanıcı: Sadece kendi bölgesinde (Marmara vb) eşleşebilir
-            cityId = data.region || "Bilinmiyor"; 
-        } else {
-            // Premium kullanıcı: Şehir seçmişse onu kullan
-            cityId = data.targetCity || "ALL";
+            // Troller sadece diğer trollerle eşleşebilir (Simulated here by prefixing city)
+            data.isTroll = true;
         }
 
-        const targetAge = isVip ? (data.ageRange || "ALL") : "ALL";
+        // 3. Matchmaking Engine (Local Memory Scan)
+        let matchIdx = -1;
+        for (let i = 0; i < waitingPool.length; i++) {
+            const w = waitingPool[i];
+            
+            // Kontrol: Kendisiyle eşleşme
+            if (w.socketId === socket.id) continue;
 
-        // 2. Filter Fees (10 Gold) - Only if premium is using special filters
-        if (isVip && (data.targetCity !== "ALL" || data.ageRange !== "ALL")) {
-            try {
-                await UserRepository.updateGoldBalance(userId_db, -10, 'premium_filter_fee');
-            } catch (e) {
-                socket.emit('match_error', { msg: "Filtreleme için yeterli altınınız yok!" });
-                return;
+            // Kontrol: Troll Pool izolasyonu
+            if (data.isTroll !== w.isTroll) continue;
+
+            // Kontrol: Gender Preference
+            const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
+            if (!genderOk) continue;
+
+            // Kontrol: Region Lock (Normal Kullanıcılar için)
+            if (!isVip && !w.isVip) {
+                if (myRegion !== w.region) continue;
             }
+
+            // Kontrol: Elite Filters (Premium City Selection)
+            if (isVip && targetCity && targetCity !== "ALL") {
+                if (w.city_id !== targetCity) continue;
+            }
+            if (w.isVip && w.targetCity && w.targetCity !== "ALL") {
+                if (myRegion !== w.targetCity) continue; // Note: simplified check
+            }
+
+            // Kontrol: Age Range (Elite)
+            if (isVip && ageRange && ageRange !== "ALL") {
+                // Not: w.age string veya number olmalı, burada basit eşitlik kontrolü
+                if (w.ageRange !== ageRange) continue;
+            }
+
+            // EŞLEŞME KRİTERLERİ SAĞLANDI
+            matchIdx = i;
+            break;
         }
 
-        // 3. Redis Matchmaking Logic (Priority & New Keys)
-        // Key format: match_q:CITY:PREF:AGERANGE
-        const queueKey = `match_q:${cityId}:${pref}:${targetAge}`;
-        
-        // Try to pop a waiting user
-        const matched = await redis.zPopMin(queueKey);
-
-        if (matched && matched.length > 0) {
-            const oppData = JSON.parse(matched[0].value);
+        if (matchIdx >= 0) {
+            const oppData = waitingPool.splice(matchIdx, 1)[0];
             const iceBreaker = "Aklına gelen ilk şeyi söyle!";
 
-            // EŞLEŞME BULUNDU
+            // EŞLEŞME BİLDİRİMİ
             io.to(socket.id).emit('match_found', {
                 opponentId: oppData.socketId, iceBreaker, role: 'caller',
                 oppUsername: oppData.username, oppAvatar: oppData.avatarUrl,
@@ -187,14 +198,32 @@ io.on('connection', (socket) => {
                 oppId_db: userId_db
             });
             
-            console.log(`🎉 REDIS MATCH: ${username} <-> ${oppData.username}`);
+            console.log(`🎉 LOCAL MATCH: ${username} <-> ${oppData.username}`);
         } else {
-            // KUYRUĞA EKLE (VIP'ler en düşük skoru alarak zPopMin ile en önce çıkar)
-            const score = isVip ? (Date.now() - 1000000000) : Date.now();
-            const payload = JSON.stringify({ socketId: socket.id, userId_db, username, avatarUrl, gender: myGender, region: myRegion });
+            // KUYRUĞA EKLE
+            const payload = {
+                socketId: socket.id, 
+                userId_db, 
+                username, 
+                avatarUrl, 
+                gender: myGender, 
+                region: myRegion,
+                isVip: isVip,
+                isTroll: data.isTroll || false,
+                preference: pref,
+                targetCity: targetCity || "ALL",
+                ageRange: ageRange || "ALL",
+                timestamp: Date.now()
+            };
+
+            // VIP Priority: VIP ise kuyruğun başına ekle
+            if (isVip) {
+                waitingPool.unshift(payload);
+            } else {
+                waitingPool.push(payload);
+            }
             
-            await redis.zAdd(queueKey, { score, value: payload });
-            socket.emit('searching', { msg: "Elite üyeler aranıyor..." });
+            socket.emit('searching', { msg: "Yakınınızdaki kişiler aranıyor..." });
         }
     });
 
