@@ -168,6 +168,7 @@ class RoomAudioClient {
         this.roomId = null;
         this.peers = {};
         this.localStream = null;
+        this.isMuted = false; // YENİ: Başlangıç susturma durumu
         this.callbacks = callbacks || {};
         this._boundListeners = {};
         this._initSocketListeners();
@@ -176,7 +177,17 @@ class RoomAudioClient {
     async join(roomId, userData) {
         this.roomId = roomId;
         try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+            });
+            
+            // YENİ: Eğer odaya girerken susturulmuş olmamız gerekiyorsa (PTT) hemen uygula
+            if (this.isMuted) {
+                this.localStream.getAudioTracks().forEach(track => {
+                    track.enabled = false;
+                });
+            }
+
             this.socket.emit('join_room', { roomId, ...userData });
         } catch(e) {
             console.error("Oda mikrofon hatası:", e);
@@ -253,7 +264,13 @@ class RoomAudioClient {
         this.peers[socketId] = pc;
 
         if (this.localStream) {
-            this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream));
+            this.localStream.getTracks().forEach(track => {
+                // YENİ: Başlangıçta susturulmuşsa track'i susturarak ekle
+                if (track.kind === 'audio' && this.isMuted) {
+                    track.enabled = false;
+                }
+                pc.addTrack(track, this.localStream);
+            });
         }
 
         pc.onicecandidate = (event) => {
@@ -304,13 +321,26 @@ class RoomAudioClient {
     }
 
     setMuteState(isMuted) {
+        this.isMuted = isMuted; // Durumu hafızaya al
         if (this.localStream) {
-            const audioTrack = this.localStream.getAudioTracks()[0];
-            if (audioTrack) {
-                audioTrack.enabled = !isMuted;
-                console.log(`🎙️ Mikrofon durumu güncellendi: ${isMuted ? 'SUSTURULDU' : 'AKTİF'}`);
-                return true;
+            // 1. Yerel stream üzerindeki trackleri kontrol et
+            const tracks = this.localStream.getAudioTracks();
+            tracks.forEach(track => {
+                track.enabled = !isMuted;
+            });
+
+            // 2. TÜM PeerConnection göndericilerini (Senders) kontrol et (Kesin çözüm)
+            for (const socketId in this.peers) {
+                const pc = this.peers[socketId];
+                pc.getSenders().forEach(sender => {
+                    if (sender.track && sender.track.kind === 'audio') {
+                        sender.track.enabled = !isMuted;
+                    }
+                });
             }
+
+            console.log(`🎙️ Mikrofon durumu güncellendi (${tracks.length} kanal + PeerSenders): ${isMuted ? 'SUSTURULDU' : 'AKTİF'}`);
+            return true;
         }
         return false;
     }
