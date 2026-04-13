@@ -16,15 +16,19 @@ const { Pool } = require('pg');
 
 // Üretim ortamında (Production) bu değerler .env dosyasından çekilir.
 // max: 50 -> Aynı anda maksimum 50 eşzamanlı aktif veritabanı bağlantısı (Yüksek performans havuzu).
-const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'blindid_db',
-    password: process.env.DB_PASS || '123456',
-    port: process.env.DB_PORT || 5432,
-    max: 50,
-    idleTimeoutMillis: 30000,
-});
+const poolConfig = process.env.DATABASE_URL 
+    ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+    : {
+        user: process.env.DB_USER || 'postgres',
+        host: process.env.DB_HOST || 'localhost',
+        database: process.env.DB_NAME || 'blindid_db',
+        password: process.env.DB_PASS || '123456',
+        port: process.env.DB_PORT || 5432,
+        max: 50,
+        idleTimeoutMillis: 30000,
+    };
+
+const pool = new Pool(poolConfig);
 
 pool.on('error', (err, client) => {
     console.error('Beklenmeyen bir Error PostgreSQL istemcisinde bozulmaya sebep oldu', err);

@@ -4,13 +4,18 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 // Para Kazandırıcı Modül Entegrasyonu
-const { UserRepository, pool } = require('./database');
+const { UserRepository, pool, initDB } = require('./database');
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('./'));
 
-app.use(express.static('./'));
+// Veritabanını Başlat (Tabloları kontrol et/oluştur)
+initDB().then(() => {
+    console.log("🗄️ Veritabanı bağlantısı ve tablolar hazır.");
+}).catch(err => {
+    console.error("❌ Veritabanı başlatma hatası:", err);
+});
 
 // ==================== ROOM DEFINITIONS ====================
 const roomDefs = {
@@ -431,8 +436,7 @@ io.on('connection', (socket) => {
         console.log('🔴 Çıktı:', socket.id);
         stopCallBilling(socket.id);
         waitingPool = waitingPool.filter(w => w.socketId !== socket.id);
-        // Redis kuyruğundan da temizle (Eğer arama yaparken çıktıysa)
-        // Not: Redis temizliği için zRem can be expensive here, ideally done on reconnect or via TTL
+        // Bellekten temizle
         for (const id in gameWaitingPools) { if (gameWaitingPools[id] === socket.id) gameWaitingPools[id] = null; }
         for (const r in rooms) { if (rooms[r].some(u => u.id === socket.id)) leaveRoom(socket, r); }
     });
