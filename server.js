@@ -148,43 +148,57 @@ io.on('connection', (socket) => {
             data.isTroll = true;
         }
 
-        // 3. Matchmaking Engine (Local Memory Scan)
+        // 3. Matchmaking Engine (Local Memory Scan - Diagnostic Mode)
+        console.log(`🔍 Eşleşme Aranıyor: ${username} | Bölge: ${myRegion} | VIP: ${isVip} | Tercih: ${pref}`);
+        
         let matchIdx = -1;
+        
         for (let i = 0; i < waitingPool.length; i++) {
             const w = waitingPool[i];
             
-            // Kontrol: Kendisiyle eşleşme
+            // 1. Temel Kontroller
             if (w.socketId === socket.id) continue;
-
-            // Kontrol: Troll Pool izolasyonu
             if (data.isTroll !== w.isTroll) continue;
 
-            // Kontrol: Gender Preference
+            // 2. Cinsiyet & Tercih Uyumlu mu?
             const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
-            if (!genderOk) continue;
-
-            // Kontrol: Region Lock (Normal Kullanıcılar için)
-            if (!isVip && !w.isVip) {
-                if (myRegion !== w.region) continue;
+            if (!genderOk) {
+                console.log(`   - ❌ Cinsiyet uyuşmuyor: ${w.username}`);
+                continue;
             }
 
-            // Kontrol: Elite Filters (Premium City Selection)
-            if (isVip && targetCity && targetCity !== "ALL") {
-                if (w.city_id !== targetCity) continue;
-            }
-            if (w.isVip && w.targetCity && w.targetCity !== "ALL") {
-                if (myRegion !== w.targetCity) continue; // Note: simplified check
+            // 3. Bölge & VIP Filtreleri
+            // Phase 1: Mükemmel Eşleşme (Aynı bölge veya VIP ise hedef şehir)
+            let regionOk = (myRegion === w.region);
+            
+            // VIP Özel Filtre Uygula
+            if (isVip && targetCity && targetCity !== "ALL" && w.region !== targetCity) regionOk = false;
+            if (w.isVip && w.targetCity && w.targetCity !== "ALL" && myRegion !== w.targetCity) regionOk = false;
+
+            if (!regionOk) {
+                console.log(`   - ⏳ Bölge uyumsuz (Faz 2'ye kalabilir): ${w.username}`);
+                continue;
             }
 
-            // Kontrol: Age Range (Elite)
-            if (isVip && ageRange && ageRange !== "ALL") {
-                // Not: w.age string veya number olmalı, burada basit eşitlik kontrolü
-                if (w.ageRange !== ageRange) continue;
-            }
-
-            // EŞLEŞME KRİTERLERİ SAĞLANDI
+            // Eğer buraya geldiyse eşleşme bulundu
             matchIdx = i;
             break;
+        }
+
+        // Phase 2: Kısıtlamaları Kaldır (Eğer ilk turda kimse bulunamadıysa)
+        if (matchIdx < 0) {
+            console.log(`🔄 Faz 2: Bölge kısıtlamaları kaldırılıyor...`);
+            for (let i = 0; i < waitingPool.length; i++) {
+                const w = waitingPool[i];
+                if (w.socketId === socket.id) continue;
+                if (data.isTroll !== w.isTroll) continue;
+
+                const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
+                if (genderOk) {
+                    matchIdx = i;
+                    break;
+                }
+            }
         }
 
         if (matchIdx >= 0) {
@@ -195,15 +209,17 @@ io.on('connection', (socket) => {
             io.to(socket.id).emit('match_found', {
                 opponentId: oppData.socketId, iceBreaker, role: 'caller',
                 oppUsername: oppData.username, oppAvatar: oppData.avatarUrl,
-                oppId_db: oppData.userId_db
+                oppId_db: oppData.userId_db,
+                oppRegion: oppData.region
             });
             io.to(oppData.socketId).emit('match_found', {
                 opponentId: socket.id, iceBreaker, role: 'callee',
                 oppUsername: username, oppAvatar: avatarUrl,
-                oppId_db: userId_db
+                oppId_db: userId_db,
+                oppRegion: myRegion
             });
             
-            console.log(`🎉 LOCAL MATCH: ${username} <-> ${oppData.username}`);
+            console.log(`🎉 MATCH SUCCESS: ${username} <-> ${oppData.username}`);
         } else {
             // KUYRUĞA EKLE
             const payload = {
@@ -221,14 +237,19 @@ io.on('connection', (socket) => {
                 timestamp: Date.now()
             };
 
-            // VIP Priority: VIP ise kuyruğun başına ekle
-            if (isVip) {
-                waitingPool.unshift(payload);
-            } else {
-                waitingPool.push(payload);
-            }
+            if (isVip) waitingPool.unshift(payload);
+            else waitingPool.push(payload);
             
-            socket.emit('searching', { msg: "Yakınınızdaki kişiler aranıyor..." });
+            socket.emit('searching', { msg: "Kuyrukta bekleme moduna geçildi, aranıyor..." });
+            console.log(`➕ Kuyruğa Eklendi: ${username} (Toplam: ${waitingPool.length})`);
+        }
+    });
+
+    socket.on('cancel_match', () => {
+        const initialLen = waitingPool.length;
+        waitingPool = waitingPool.filter(w => w.socketId !== socket.id);
+        if (waitingPool.length < initialLen) {
+            console.log(`➖ Kuyruktan Çıktı: ${socket.id} (Kalan: ${waitingPool.length})`);
         }
     });
 

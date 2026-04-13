@@ -857,6 +857,24 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        function stopCallTimer() {
+            if (window.matchInterval) clearInterval(window.matchInterval);
+            if (window.callTimerInterval) clearInterval(window.callTimerInterval);
+            if (window.autoStartTimer) clearTimeout(window.autoStartTimer);
+        }
+
+        globalSocket.on('searching', (data) => {
+            const statusText = document.getElementById('match-status-text');
+            if (statusText) statusText.innerText = data.msg || "Kullanıcılar aranıyor...";
+        });
+
+        globalSocket.on('peer_disconnected', (data) => {
+            console.log("☎️ Bağlantı koptu:", data.msg);
+            stopCallTimer();
+            if (webrtcClient) webrtcClient.hangUp();
+            showOverlay(document.getElementById('rating-screen'));
+        });
+
         // Gerçek Sunucudan "Eşleşme Bulundu" Sinyali Geldiğinde:
         globalSocket.on('match_found', (data) => {
             console.log("Sunucudan eşleşme geldi! Hedef:", data.opponentId);
@@ -1086,14 +1104,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ringing = document.getElementById('dial-ringing');
                 if (ringing) ringing.play().catch(e => console.log("Ses oynatılamadı."));
 
-                // 10 Saniye Bekleme ve Meşgul Mesajı
-                if (window.busyTimeout) clearTimeout(window.busyTimeout);
                 window.busyTimeout = setTimeout(() => {
                     const el = document.getElementById('match-status-text');
                     if (el && el.innerText.includes("Aranıyor")) {
                         el.innerText = "Kullanıcılar meşgul, aranıyor...";
                     }
                 }, 10000);
+
+                window.cancelMatch = function() {
+                    if (globalSocket) globalSocket.emit('cancel_match');
+                    if (window.busyTimeout) clearTimeout(window.busyTimeout);
+                    const ringing = document.getElementById('dial-ringing');
+                    if (ringing) { ringing.pause(); ringing.currentTime = 0; }
+                    hideOverlays();
+                };
 
                 clearInterval(matchingInterval);
                 matchingInterval = setTimeout(() => {
@@ -1671,10 +1695,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.getElementById('radio-now-playing').classList.add('hidden');
             document.getElementById('radio-player-widget').classList.add('hidden');
-            document.getElementById('room-participants-grid').classList.remove('hidden');
+            const grid = document.getElementById('room-participants-grid');
+            if (grid) grid.classList.remove('hidden');
 
             hideOverlays();
         }
+        window.leaveCurrentRoom = window.leaveRoom; // Alias for index.html
 
 
         function addRoomSystemMessage(text) {
