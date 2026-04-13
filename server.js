@@ -138,22 +138,34 @@ io.on('connection', (socket) => {
 
         console.log(`⏳ Arama: ${username} (VIP:${isVip}, Karma:${karma})`);
 
-        // 1. Troll Pool Control
-        let cityId = regionFilter ? myRegion : "ALL";
-        if (karma < 50) cityId = "TROLL_POOL";
+        // 1. Mandatory Region for Non-VIPs / Troll Pool Control
+        let cityId = "ALL";
+        
+        if (karma < 50) {
+            cityId = "TROLL_POOL";
+        } else if (!isVip) {
+            // Normal kullanıcı: Sadece kendi bölgesinde (Marmara vb) eşleşebilir
+            cityId = data.region || "Bilinmiyor"; 
+        } else {
+            // Premium kullanıcı: Şehir seçmişse onu kullan
+            cityId = data.targetCity || "ALL";
+        }
 
-        // 2. Filter Fees (10 Gold)
-        if (regionFilter || pref === 'opposite') {
+        const targetAge = isVip ? (data.ageRange || "ALL") : "ALL";
+
+        // 2. Filter Fees (10 Gold) - Only if premium is using special filters
+        if (isVip && (data.targetCity !== "ALL" || data.ageRange !== "ALL")) {
             try {
-                await UserRepository.updateGoldBalance(userId_db, -10, 'match_filter_fee');
+                await UserRepository.updateGoldBalance(userId_db, -10, 'premium_filter_fee');
             } catch (e) {
                 socket.emit('match_error', { msg: "Filtreleme için yeterli altınınız yok!" });
                 return;
             }
         }
 
-        // 3. Redis Matchmaking Logic (VIP Priority)
-        const queueKey = `match_q:${cityId}:${pref}`;
+        // 3. Redis Matchmaking Logic (Priority & New Keys)
+        // Key format: match_q:CITY:PREF:AGERANGE
+        const queueKey = `match_q:${cityId}:${pref}:${targetAge}`;
         
         // Try to pop a waiting user
         const matched = await redis.zPopMin(queueKey);

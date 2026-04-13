@@ -533,11 +533,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (oppBtn) oppBtn.classList.toggle('active', pref === 'opposite');
         if (mixBtn) mixBtn.classList.toggle('active', pref === 'mixed');
     }
-    window.toggleRegionFilter = function () {
-        matchRegionFilter = !matchRegionFilter;
-        document.getElementById('filter-region').classList.toggle('active', matchRegionFilter);
-        document.getElementById('filter-label-region').innerText = matchRegionFilter ? 'Bölge: Açık ✓' : 'Bölge: Kapalı';
-    }
+    window.openAdvancedFilters = function() {
+        if (!currentUser) return;
+        if (currentUser.is_vip) {
+            showOverlay(document.getElementById('advanced-filters-modal'));
+        } else {
+            alert("💎 Elite Özellik: Şehir ve Yaş aralığı seçerek eşleşmek için VIP üye olmalısın!");
+        }
+    };
 
     // Sunucu adresi: Deployment'ta (Render/Railway) kendi adresini otomatik alır.
     if (window.io) {
@@ -1062,15 +1065,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('accept-btn').parentElement.style.display = 'none';
                 document.getElementById('skip-btn').parentElement.style.display = 'none';
 
-                // Sunucuya kuyruğa girme isteği at (cinsiyet, bölge, tercih bilgileriyle)
+                // Sunucuya kuyruğa girme isteği at (Gelişmiş Filtre ve Bölge Korumalı)
+                const targetCity = currentUser?.is_vip ? document.getElementById('adv-filter-city')?.value : "ALL";
+                const targetAge = currentUser?.is_vip ? document.getElementById('adv-filter-age')?.value : "ALL";
+
                 globalSocket.emit('find_match', {
                     gender: currentUser?.gender || 'erkek',
                     region: currentUser?.region || 'Marmara',
                     preference: matchGenderPref,
-                    regionFilter: matchRegionFilter,
-                    age: currentUser?.age || '',
+                    targetCity: targetCity, // Premium city seçimi
+                    ageRange: targetAge,    // Premium yaş seçimi
+                    userId_db: currentUser?.id_db || currentUser?.username,
+                    isVip: currentUser?.is_vip || false,
+                    karma: currentUser?.karma_score || 100,
                     username: currentUser?.username || 'Anonim',
-                    zodiac: currentUser?.zodiac || ''
+                    avatarUrl: currentUser?.avatarUrl || ''
                 });
 
                 // Arama sesini çal
@@ -2398,13 +2407,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (globalSocket) globalSocket.emit('update_preference', { matchPref: pref });
         }
 
-        window.toggleRegionFilter = function () {
-            currentUser.regionFilter = !currentUser.regionFilter;
-            const lbl = document.getElementById('filter-label-region');
-            if (lbl) lbl.innerText = `Bölge: ${currentUser.regionFilter ? 'Açık' : 'Kapalı'}`;
-            document.getElementById('filter-region').classList.toggle('active', currentUser.regionFilter);
-            localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
-        }
 
         window.startVisualSearch = function () {
             const overlay = document.getElementById('visual-search-overlay');
