@@ -96,22 +96,15 @@ io.on('connection', (socket) => {
 
         console.log(`⏳ Arama: ${socket.id} (${myGender}, ${myRegion}, pref:${pref}, regionFilter:${regionFilter})`);
 
-        // Try to find a match
+        // --- SMART MATCHING ENGINE ---
         let matchIdx = -1;
+
+        // 1. Pass: Perfect Match (Gender & Region if filter is on)
         for (let i = 0; i < waitingPool.length; i++) {
             const w = waitingPool[i];
             if (w.socketId === socket.id) continue;
 
-            // Gender check
-            let genderOk = false;
-            if (pref === 'mixed' || w.preference === 'mixed') {
-                genderOk = true;
-            } else {
-                // Both want opposite: they must be different genders
-                genderOk = (myGender !== w.gender);
-            }
-
-            // Region check
+            const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
             let regionOk = true;
             if (regionFilter && w.regionFilter) {
                 regionOk = (myRegion === w.region);
@@ -120,6 +113,19 @@ io.on('connection', (socket) => {
             if (genderOk && regionOk) {
                 matchIdx = i;
                 break;
+            }
+        }
+
+        // 2. Pass: If no match found and we are in a small pool, relax region filter automatically
+        if (matchIdx === -1 && regionFilter) {
+            for (let i = 0; i < waitingPool.length; i++) {
+                const w = waitingPool[i];
+                if (w.socketId === socket.id) continue;
+                const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
+                if (genderOk) {
+                    matchIdx = i;
+                    break;
+                }
             }
         }
 

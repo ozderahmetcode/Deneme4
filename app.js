@@ -328,14 +328,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let webrtcClient = null;
     let roomClient = null; // Mesh Room Audio
     let lastMatchData = null;
-    let matchGenderPref = 'opposite'; // 'opposite' or 'mixed'
+    let matchGenderPref = 'mixed'; // Default to mixed for better match rate
     let matchRegionFilter = false;
 
     // Match filter functions
     window.setMatchPref = function (pref) {
         matchGenderPref = pref;
-        document.getElementById('filter-opposite').classList.toggle('active', pref === 'opposite');
-        document.getElementById('filter-mixed').classList.toggle('active', pref === 'mixed');
+        const oppBtn = document.getElementById('filter-opposite');
+        const mixBtn = document.getElementById('filter-mixed');
+        if (oppBtn) oppBtn.classList.toggle('active', pref === 'opposite');
+        if (mixBtn) mixBtn.classList.toggle('active', pref === 'mixed');
     }
     window.toggleRegionFilter = function () {
         matchRegionFilter = !matchRegionFilter;
