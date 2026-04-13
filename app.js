@@ -1816,51 +1816,31 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Mock veriler pırıl pırıl eklendi! ✨");
         }
 
+        let trendChart = null;
+        let mixChart = null;
+        let gaugeChart = null;
+
         function updateStatsUI() {
             if (!stats) return;
-            const total = (stats.likes || 0) + (stats.dislikes || 0) + (stats.reports || 0);
+            if (typeof Chart === "undefined") return;
+
             const callCount = stats.totalCalls || 0;
-            const talkTimeSec = callCount > 0 ? Math.floor(stats.talkTimeSeconds / callCount) : 0;
+            const totalInteraction = (stats.likes || 0) + (stats.dislikes || 0) + (stats.reports || 0);
 
-            const likePct = total > 0 ? ((stats.likes / total) * 100).toFixed(0) : 0;
-            const dislikePct = total > 0 ? (((stats.dislikes || 0) / total) * 100).toFixed(0) : 0;
-            const completionPct = callCount > 0 ? 92 : 0;
-            const reportCount = stats.reports || 0;
-            const reportPct = total > 0 ? ((reportCount / total) * 100).toFixed(1) : 0;
+            // Calculate Metrics
+            const likePct = totalInteraction > 0 ? ((stats.likes / totalInteraction) * 100).toFixed(0) : 0;
+            const dislikePct = totalInteraction > 0 ? ((stats.dislikes / totalInteraction) * 100).toFixed(0) : 0;
+            const completionPct = callCount > 0 ? 92 : 0; 
+            const avgDuration = callCount > 0 ? Math.floor(stats.talkTimeSeconds / callCount) : 0;
+            const reportPct = totalInteraction > 0 ? ((stats.reports / totalInteraction) * 100).toFixed(1) : 0;
+            const trustScore = (100 - ((stats.reports || 0) * 8) - ((stats.dislikes || 0) * 0.5)).toFixed(0);
 
+            // Update Text Elements
             const mapping = {
-                'stat-like-ratio': `%${likePct}`,
-                'stat-dislike-ratio': `%${dislikePct}`,
-                'stat-talk-time': `${talkTimeSec}s`,
-                'stat-completion': `%${completionPct}`,
+                'stat-like-ratio': `%${likePct} Beğeni`,
+                'stat-completion': `%${completionPct} Tamamlama`,
+                'stat-talk-time': `${avgDuration}s`,
                 'stat-report-rate': `%${reportPct}`,
-                'trust-score': `%${(100 - (reportCount * 5) - ((stats.dislikes || 0) * 0.5)).toFixed(0)}`
-            };
-
-            for (const k in mapping) {
-                const el = document.getElementById(k);
-                if (el) el.innerText = mapping[k];
-            }
-
-            // --- CHART ENHANCEMENT (IMAGE 1 PREMIUM) ---
-            const ctx = document.getElementById('profileStatsChart');
-            if (ctx && typeof Chart !== "undefined") {
-                try {
-                    if (statsChart) {
-                        statsChart.destroy();
-                    }
-                    statsChart = new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: ['Huzurlu', 'Dislike', 'Rapor'],
-                            datasets: [{
-                                data: [stats.likes || 1, stats.dislikes || 0, stats.reports || 0],
-                                backgroundColor: ['#BA945B', '#4d4d4d', '#ff4757'],
-                                borderWidth: 0,
-                                hoverOffset: 4
-                            }]
-                        },
-                        options: {
                             responsive: true,
                             maintainAspectRatio: false,
                             plugins: {
