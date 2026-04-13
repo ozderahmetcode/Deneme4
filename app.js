@@ -1102,7 +1102,123 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- ROOMS & AUDIO MANAGEMENT ----
+    // ---- ROOMS & AUDIO MANAGEMENT (WebRTC Mesh) ----
+    class RoomAudioClient {
+        constructor(socket, container, callbacks) {
+            this.socket = socket;
+            this.container = container;
+            this.roomId = null;
+            this.peers = {};
+            this.localStream = null;
+            this.onParticipants = callbacks.onParticipants || (() => { });
+        }
+
+        async join(roomId, userData) {
+            this.roomId = roomId;
+            window.activeRoomId = roomId;
+            try {
+                this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                this.socket.emit('join_room', { roomId, ...userData });
+
+                this.socket.on('room_participants', (users) => {
+                    // Update the global state
+                    window.activeRoomParticipants = users;
+                    this.onParticipants(users);
+                });
+
+                this.socket.on('webrtc_signal', async (data) => {
+                    const { from, signal } = data;
+                    if (signal.type === 'offer') {
+                        await this.handleOffer(from, signal);
+                    } else if (signal.type === 'answer') {
+                        if (this.peers[from]) await this.peers[from].setRemoteDescription(new RTCSessionDescription(signal));
+                    } else if (signal.candidate) {
+                        if (this.peers[from]) await this.peers[from].addIceCandidate(new RTCIceCandidate(signal));
+                    }
+                });
+
+                this.socket.on('user_joined_room', async (user) => {
+                    if (user.id !== this.socket.id) {
+                        await this.initiateCall(user.id);
+                    }
+                });
+
+                this.socket.on('user_left_room', (userId) => {
+                    if (this.peers[userId]) {
+                        this.peers[userId].close();
+                        delete this.peers[userId];
+                        const el = document.getElementById(`audio-${userId}`);
+                        if (el) el.remove();
+                    }
+                });
+
+            } catch (e) {
+                console.error("Mic Access Error:", e);
+                alert("Mikrofon izni verilmediği için sesli sohbet pasif kalacaktır.");
+            }
+        }
+
+        async initiateCall(targetId) {
+            const pc = this.createPeer(targetId);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this.socket.emit('webrtc_signal', { targetId, signal: offer });
+        }
+
+        async handleOffer(from, offer) {
+            const pc = this.createPeer(from);
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            this.socket.emit('webrtc_signal', { targetId: from, signal: answer });
+        }
+
+        createPeer(targetId) {
+            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            this.peers[targetId] = pc;
+
+            this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream));
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) this.socket.emit('webrtc_signal', { targetId, signal: event.candidate });
+            };
+
+            pc.ontrack = (event) => {
+                let audio = document.getElementById(`audio-${targetId}`);
+                if (!audio) {
+                    audio = document.createElement('audio');
+                    audio.id = `audio-${targetId}`;
+                    audio.autoplay = true;
+                    this.container.appendChild(audio);
+                }
+                audio.srcObject = event.streams[0];
+            };
+
+            return pc;
+        }
+
+        setMute(isMuted) {
+            if (this.localStream) {
+                this.localStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
+            }
+        }
+
+        leave() {
+            if (this.localStream) this.localStream.getTracks().forEach(t => t.stop());
+            for (let id in this.peers) this.peers[id].close();
+            this.peers = {};
+            this.socket.emit('leave_room', { roomId: this.roomId });
+            this.socket.off('room_participants');
+            this.socket.off('webrtc_signal');
+            this.socket.off('user_joined_room');
+            this.socket.off('user_left_room');
+            window.activeRoomParticipants = [];
+            window.activeRoomId = null;
+        }
+    }
+
     roomClient = null;
+
     let roomMicMode = 'open'; // 'open' or 'ptt'
 
     window.toggleMuteUI = function (btn) {

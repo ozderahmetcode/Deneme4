@@ -510,7 +510,7 @@ canvas { box-shadow: 0 0 20px rgba(78, 84, 200, 0.3); background: #0f172a; }
 .chat-send-btn:hover { transform: scale(1.1) rotate(-10deg); background: var(--white); }
 
 /* ROOM SPECIFIC REFINEMENTS */
-#room-inner-screen { background: var(--bg-dark); }
+#room-inner-screen { background: var(--bg-dark) !important; }
 .room-header-lv {
     background: rgba(26, 17, 16, 0.95);
     border-bottom: 1px solid rgba(186, 148, 91, 0.2);
