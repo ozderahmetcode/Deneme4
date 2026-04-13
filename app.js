@@ -1793,8 +1793,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.switchProfileTab = function (tabName) {
             document.querySelectorAll('.profile-tab-content').forEach(c => c.classList.add('hidden'));
             document.querySelectorAll('.p-tab-btn').forEach(b => b.classList.remove('active'));
-
-            const target = document.getElementById(`p-content-${tabName}`);
+                    const target = document.getElementById(`p-content-${tabName}`);
             const btn = document.getElementById(`p-tab-${tabName}`);
 
             if (target) target.classList.remove('hidden');
@@ -1827,39 +1826,91 @@ document.addEventListener('DOMContentLoaded', () => {
             const callCount = stats.totalCalls || 0;
             const totalInteraction = (stats.likes || 0) + (stats.dislikes || 0) + (stats.reports || 0);
 
-            // Calculate Metrics
+            // Metrics
             const likePct = totalInteraction > 0 ? ((stats.likes / totalInteraction) * 100).toFixed(0) : 0;
-            const dislikePct = totalInteraction > 0 ? ((stats.dislikes / totalInteraction) * 100).toFixed(0) : 0;
             const completionPct = callCount > 0 ? 92 : 0; 
             const avgDuration = callCount > 0 ? Math.floor(stats.talkTimeSeconds / callCount) : 0;
             const reportPct = totalInteraction > 0 ? ((stats.reports / totalInteraction) * 100).toFixed(1) : 0;
             const trustScore = (100 - ((stats.reports || 0) * 8) - ((stats.dislikes || 0) * 0.5)).toFixed(0);
 
-            // Update Text Elements
+            // UI Elements
             const mapping = {
                 'stat-like-ratio': `%${likePct} Beğeni`,
                 'stat-completion': `%${completionPct} Tamamlama`,
                 'stat-talk-time': `${avgDuration}s`,
                 'stat-report-rate': `%${reportPct}`,
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'right',
-                                    labels: {
-                                        color: '#555',
-                                        font: { size: 11, weight: 'bold' },
-                                        boxWidth: 10
-                                    }
-                                }
-                            },
-                            cutout: '70%'
-                        }
-                    });
-                } catch (e) {
-                    console.error("Chart Error:", e);
+                'trust-score': `%${trustScore}`
+            };
+
+            for (const id in mapping) {
+                const el = document.getElementById(id);
+                if (el) el.innerText = mapping[id];
+            }
+
+            const bar = document.getElementById('trust-bar-fill');
+            if (bar) bar.style.width = `${Math.max(10, trustScore)}%`;
+
+            const statusChip = document.getElementById('stat-status-chip');
+            if (statusChip) {
+                if (parseFloat(reportPct) > 5) {
+                    statusChip.innerText = "UYARI"; statusChip.style.color = "var(--red)"; statusChip.style.borderColor = "var(--red)";
+                } else {
+                    statusChip.innerText = "GÜVENLİ"; statusChip.style.color = "#00b894"; statusChip.style.borderColor = "#00b894";
                 }
             }
+
+            // Charts
+            try {
+                const trendCtx = document.getElementById('activityTrendChart');
+                if (trendCtx) {
+                    if (trendChart) trendChart.destroy();
+                    trendChart = new Chart(trendCtx, {
+                        type: 'line',
+                        data: {
+                            labels: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+                            datasets: [{
+                                label: 'Görüşme',
+                                data: [15, 25, 20, 35, 30, 45, 40],
+                                borderColor: '#00d2ff', backgroundColor: 'rgba(0, 210, 255, 0.1)',
+                                fill: true, tension: 0.4, borderWidth: 3, pointRadius: 0
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                                   scales: { x: { grid: { display:false }, ticks:{ color:'#888', font:{size:9} } }, y:{ display:false } } }
+                    });
+                }
+                const mixCtx = document.getElementById('interactionMixChart');
+                if (mixCtx) {
+                    if (mixChart) mixChart.destroy();
+                    mixChart = new Chart(mixCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Like', 'Dislike', 'Report'],
+                            datasets: [{
+                                data: [stats.likes||1, stats.dislikes||0, stats.reports||0],
+                                backgroundColor: ['#BA945B', '#444', '#ff4757'],
+                                borderWidth: 0, cutout: '75%'
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+                }
+                const gaugeCtx = document.getElementById('completionGaugeChart');
+                if (gaugeCtx) {
+                    if (gaugeChart) gaugeChart.destroy();
+                    gaugeChart = new Chart(gaugeCtx, {
+                        type: 'doughnut',
+                        data: {
+                            datasets: [{
+                                data: [completionPct, 100 - completionPct],
+                                backgroundColor: ['#00b894', 'rgba(255,255,255,0.05)'],
+                                borderWidth: 0, circumference: 180, rotation: 270, cutout: '85%'
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+                }
+            } catch (e) { console.error("Chart Error:", e); }
         }
 
         window.togglePCallMute = function (btn) {
