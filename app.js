@@ -1149,12 +1149,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.socket.on('room_user_joined', async (user) => {
                     if (user.id !== this.socket.id) {
                         console.log(`User joined: ${user.username} (${user.id})`);
+                        // Update global list
+                        if (!window.activeRoomParticipants.find(u => u.id === user.id)) {
+                            window.activeRoomParticipants.push(user);
+                            updateParticipantsUI();
+                            addRoomSystemMessage(`${user.username} odaya katıldı.`);
+                        }
                         await this.initiateCall(user.id);
                     }
                 });
 
                 this.socket.on('room_user_left', (data) => {
                     const userId = data.id;
+                    const user = window.activeRoomParticipants.find(u => u.id === userId);
+                    if (user) {
+                        addRoomSystemMessage(`${user.username} odadan ayrıldı.`);
+                        window.activeRoomParticipants = window.activeRoomParticipants.filter(u => u.id !== userId);
+                        updateParticipantsUI();
+                    }
                     if (this.peers[userId]) {
                         this.peers[userId].close();
                         delete this.peers[userId];
@@ -1438,6 +1450,20 @@ document.addEventListener('DOMContentLoaded', () => {
         hideOverlays();
     }
 
+
+    function addRoomSystemMessage(text) {
+        const container = document.getElementById('room-messages-container');
+        if (!container) return;
+        const div = document.createElement('div');
+        div.style.textAlign = 'center';
+        div.style.margin = '10px 0';
+        div.style.fontSize = '0.7rem';
+        div.style.color = 'var(--gold)';
+        div.style.opacity = '0.7';
+        div.innerText = `— ${text} —`;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
 
     window.toggleRoomMicMode = function () {
         const btn = document.getElementById('room-mic-mode');
