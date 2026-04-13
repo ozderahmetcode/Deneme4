@@ -2245,7 +2245,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     });
                 }
-            } catch (e) { console.log("Chart Error:", e); }
 
                 const gaugeCtx = document.getElementById('completionGaugeChart');
                 if (gaugeCtx) {
