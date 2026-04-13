@@ -117,6 +117,11 @@
                 </div>
 
                 <div class="right-sidebar">
+                    <div class="user-stats">
+                        <div class="stat-pill"><i class="fa-solid fa-coins"></i> <span class="user-gold-val">100</span> Gold</div>
+                        <div class="stat-pill" style="cursor:pointer; background: #ffcc00; color:#000;" onclick="watchAd()"><i class="fa-solid fa-play"></i> +5 Gold</div>
+                        <div class="stat-pill"><i class="fa-solid fa-star"></i> <span id="user-xp">0</span> XP</div>
+                    </div>
                     <div class="icon-item text-gold" onclick="openGoldStore()" style="cursor:pointer;"><i
                             class="fa-solid fa-coins"></i> <span id="ui-gold-text">100</span> <i
                             class="fa-solid fa-plus-circle"></i></div>
@@ -525,6 +530,9 @@
                             <h3><span id="profile-username-text">kullanıcı_adı</span> <button class="edit-name-btn"
                                     onclick="openModal('edit-profile-modal')"><i
                                         class="fa-solid fa-pencil"></i></button></h3>
+                            <div class="vip-badge-profile" style="background: linear-gradient(45deg, #ffd700, #ff8c00); color: white; padding: 5px 15px; border-radius: 20px; font-weight: 800; font-size: 0.7rem; display: inline-block; margin-bottom: 10px;">
+                                <i class="fa-solid fa-crown"></i> ELITE VIP
+                            </div>
                             <p class="profil-stats"
                                 style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">
                                 <span id="profile-age-text">Yaş: Gizli</span> | <span id="profile-height-text">Boy:
@@ -858,10 +866,14 @@
             <strong>Buz Kıran:</strong> <span id="ice-breaker-text">Sence en iyi pizza malzemesi nedir?</span>
         </div>
 
-        <div style="margin-top:20px;">
+        <div style="margin-top:20px; display:flex; gap:10px;">
             <button class="btn-gold" id="incall-add-friend" onclick="addFriendInCall()" 
                     style="font-size:0.7rem; padding:8px 15px; border-radius:20px; background:rgba(255,255,255,0.05); border:1px solid rgba(186,148,91,0.5);">
                 <i class="fa-solid fa-user-plus"></i> Arkadaş Ekle
+            </button>
+            <button class="btn-gold" onclick="sendGift('opp_id', 50, 'diamond')" 
+                    style="font-size:0.7rem; padding:8px 15px; border-radius:20px; background:rgba(255,204,0,0.2); border:1px solid #ffcc00; color:#ffcc00;">
+                <i class="fa-solid fa-gift"></i> Hediye Gönder
             </button>
         </div>
 
@@ -1035,6 +1047,11 @@
             style="background:transparent; flex:1; display:flex; flex-direction:column; position:relative;">
             <div class="chat-body" id="room-messages-container" style="flex:1;">
                 <div class="chat-bubble them"><span>Odaya Hoş Geldin!</span></div>
+            </div>
+            <div id="room-controls" style="display:flex; justify-content:center; gap:10px; padding:10px;">
+                <button id="room-mic-toggle" class="control-btn active" onclick="toggleRoomMic()"><i class="fa-solid fa-microphone"></i></button>
+                <button class="control-btn" onclick="sendGift('some_id', 50, 'diamond')" style="color:#ffcc00;"><i class="fa-solid fa-gift"></i></button>
+                <button id="room-leave-btn" class="control-btn leave" onclick="leaveCurrentRoom()"><i class="fa-solid fa-phone-slash"></i></button>
             </div>
             <div class="chat-input-area">
                 <div class="chat-input-wrapper">

@@ -1,13 +1,19 @@
-console.log("🟢 Sunucu başlatma hazırlığı yapılıyor...");
-const express = require('express');
+const app = express();
 const http = require('http');
 const { Server } = require('socket.io');
 
-const app = express();
+// Para Kazandırıcı Modül Entegrasyonu
+const { UserRepository, pool } = require('./database');
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('./'));
+
+// Redis Matchmaking Setup
+const { createClient } = require('redis');
+const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+redis.on('error', (err) => console.error('Redis Error:', err));
+redis.connect().then(() => console.log("🔥 Matchmaking Engine (Redis) Hazır!"));
 
 // ==================== ROOM DEFINITIONS ====================
 const roomDefs = {
@@ -67,7 +73,42 @@ for (const id in roomDefs) rooms[id] = [];
 // Gender-aware pool: { socketId, gender, region, preference }
 let waitingPool = [];
 
-// Game pools
+// Monetization: Active Call Tracking (Gold per minute)
+const activeCalls = new Map(); // key: socketId (caller), value: { targetId, intervalId, startTime }
+
+function startCallBilling(callerSocket, targetId, callerId_db) {
+    if (activeCalls.has(callerSocket.id)) return;
+
+    const intervalId = setInterval(async () => {
+        try {
+            const cost = 10; // 10 Gold per minute
+            const newBalance = await UserRepository.updateGoldBalance(callerId_db, -cost, 'call_per_minute');
+            
+            if (newBalance < cost) {
+                // Bakiye bitti, aramayı sonlandır
+                io.to(callerSocket.id).emit('insufficient_funds_stop', { msg: "Bakiyeniz bitti! Görüşme sonlandırılıyor." });
+                io.to(targetId).emit('peer_disconnected', { msg: "Karşı tarafın bakiyesi bitti." });
+                stopCallBilling(callerSocket.id);
+            } else {
+                callerSocket.emit('balance_update', { newBalance });
+            }
+        } catch (err) {
+            console.error("Billing Error:", err);
+            stopCallBilling(callerSocket.id);
+        }
+    }, 60000); // Her 60 saniyede bir
+
+    activeCalls.set(callerSocket.id, { targetId, intervalId, startTime: Date.now() });
+}
+
+function stopCallBilling(socketId) {
+    if (activeCalls.has(socketId)) {
+        clearInterval(activeCalls.get(socketId).intervalId);
+        activeCalls.delete(socketId);
+    }
+}
+
+// Game pools (Restored)
 const gameWaitingPools = { 'xox': null, 'tetris': null };
 const activeGameCounts = { 'xox': 0, 'tetris': 0 };
 
@@ -87,73 +128,68 @@ io.on('connection', (socket) => {
     // Initial Push to newly connected user only
     socket.emit('receive_rooms_info', getRoomsData());
     socket.emit('games_info_update', getGamesData());
-    socket.on('find_match', (data) => {
-        // data: { gender, region, preference ('opposite'|'mixed') }
+    socket.on('find_match', async (data) => {
+        // data: { gender, region, preference ('opposite'|'mixed'), userId_db, isVip, karma }
+        const { userId_db, isVip, karma, username, avatarUrl } = data;
         const myGender = data.gender || 'erkek';
         const myRegion = data.region || '';
         const pref = data.preference || 'opposite';
         const regionFilter = data.regionFilter || false;
 
-        console.log(`⏳ Arama: ${socket.id} (${myGender}, ${myRegion}, pref:${pref}, regionFilter:${regionFilter})`);
+        console.log(`⏳ Arama: ${username} (VIP:${isVip}, Karma:${karma})`);
 
-        // --- SMART MATCHING ENGINE ---
-        let matchIdx = -1;
+        // 1. Troll Pool Control
+        let cityId = regionFilter ? myRegion : "ALL";
+        if (karma < 50) cityId = "TROLL_POOL";
 
-        // 1. Pass: Perfect Match (Gender & Region if filter is on)
-        for (let i = 0; i < waitingPool.length; i++) {
-            const w = waitingPool[i];
-            if (w.socketId === socket.id) continue;
-
-            const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
-            let regionOk = true;
-            if (regionFilter && w.regionFilter) {
-                regionOk = (myRegion === w.region);
-            }
-
-            if (genderOk && regionOk) {
-                matchIdx = i;
-                break;
+        // 2. Filter Fees (10 Gold)
+        if (regionFilter || pref === 'opposite') {
+            try {
+                await UserRepository.updateGoldBalance(userId_db, -10, 'match_filter_fee');
+            } catch (e) {
+                socket.emit('match_error', { msg: "Filtreleme için yeterli altınınız yok!" });
+                return;
             }
         }
 
-        // 2. Pass: If no match found and we are in a small pool, relax region filter automatically
-        if (matchIdx === -1 && regionFilter) {
-            for (let i = 0; i < waitingPool.length; i++) {
-                const w = waitingPool[i];
-                if (w.socketId === socket.id) continue;
-                const genderOk = (pref === 'mixed' || w.preference === 'mixed') || (myGender !== w.gender);
-                if (genderOk) {
-                    matchIdx = i;
-                    break;
-                }
-            }
-        }
+        // 3. Redis Matchmaking Logic (VIP Priority)
+        const queueKey = `match_q:${cityId}:${pref}`;
+        
+        // Try to pop a waiting user
+        const matched = await redis.zPopMin(queueKey);
 
-        if (matchIdx >= 0) {
-            const opponent = waitingPool.splice(matchIdx, 1)[0];
-            const iceBreaker = "Küçükken kahramanım dediğin biri var mıydı?";
+        if (matched && matched.length > 0) {
+            const oppData = JSON.parse(matched[0].value);
+            const iceBreaker = "Aklına gelen ilk şeyi söyle!";
 
+            // EŞLEŞME BULUNDU
             io.to(socket.id).emit('match_found', {
-                opponentId: opponent.socketId, iceBreaker, role: 'caller',
-                oppGender: opponent.gender, oppRegion: opponent.region,
-                oppAge: opponent.age, oppUsername: opponent.username, oppZodiac: opponent.zodiac
+                opponentId: oppData.socketId, iceBreaker, role: 'caller',
+                oppUsername: oppData.username, oppAvatar: oppData.avatarUrl,
+                oppId_db: oppData.userId_db
             });
-            io.to(opponent.socketId).emit('match_found', {
+            io.to(oppData.socketId).emit('match_found', {
                 opponentId: socket.id, iceBreaker, role: 'callee',
-                oppGender: myGender, oppRegion: myRegion,
-                oppAge: data.age, oppUsername: data.username, oppZodiac: data.zodiac
+                oppUsername: username, oppAvatar: avatarUrl,
+                oppId_db: userId_db
             });
-            console.log(`🎉 EŞLEŞME! ${opponent.socketId} <-> ${socket.id}`);
+            
+            console.log(`🎉 REDIS MATCH: ${username} <-> ${oppData.username}`);
         } else {
-            // Remove any existing entry for this socket
-            waitingPool = waitingPool.filter(w => w.socketId !== socket.id);
-            waitingPool.push({
-                socketId: socket.id, gender: myGender, region: myRegion,
-                preference: pref, regionFilter,
-                age: data.age, username: data.username, zodiac: data.zodiac
-            });
-            console.log('🛌 Kuyruğa alındı:', socket.id);
+            // KUYRUĞA EKLE (VIP'ler en düşük skoru alarak zPopMin ile en önce çıkar)
+            const score = isVip ? (Date.now() - 1000000000) : Date.now();
+            const payload = JSON.stringify({ socketId: socket.id, userId_db, username, avatarUrl, gender: myGender, region: myRegion });
+            
+            await redis.zAdd(queueKey, { score, value: payload });
+            socket.emit('searching', { msg: "Elite üyeler aranıyor..." });
         }
+    });
+
+    // --- MONETIZATION: BILLING TRIGGERS ---
+    socket.on('call_confirmed', (data) => {
+        // data: { targetId, userId_db }
+        console.log(`✅ Arama Onaylandı: ${socket.id} (Billing Başlıyor)`);
+        startCallBilling(socket, data.targetId, data.userId_db);
     });
 
     // --- GAME MATCHMAKING ---
@@ -186,7 +222,10 @@ io.on('connection', (socket) => {
     socket.on("room_webrtc_answer", (p) => io.to(p.targetId).emit("room_webrtc_answer", { senderId: socket.id, sdp: p.sdp }));
     socket.on("room_webrtc_ice_candidate", (p) => io.to(p.targetId).emit("room_webrtc_ice_candidate", { senderId: socket.id, candidate: p.candidate }));
 
-    socket.on('end_call', (p) => io.to(p.targetId).emit('peer_disconnected', { msg: 'Disconnected' }));
+    socket.on('end_call', (p) => {
+        stopCallBilling(socket.id);
+        io.to(p.targetId).emit('peer_disconnected', { msg: 'Disconnected' });
+    });
 
     // --- ROOMS ---
     socket.on('join_room', (data) => {
@@ -229,6 +268,50 @@ io.on('connection', (socket) => {
     // --- DM MESSAGING ---
     socket.on('send_message', (data) => {
         io.to(data.targetId).emit('receive_message', { text: data.text, senderId: socket.id, type: data.type || 'text', photoData: data.photoData, audioData: data.audioData, ephemeral: data.ephemeral });
+    });
+
+    // --- MONETIZATION: GIFTING SYSTEM ---
+    socket.on('send_gift', async (data) => {
+        // data: { targetId, giftId, goldValue, senderUsername, targetUsername }
+        const { targetId, giftId, goldValue, senderUsername, targetUsername, senderId_db, targetId_db } = data;
+        
+        try {
+            // 1. Gönderen bakiyesini kontrol et ve düş
+            const newBalance = await UserRepository.updateGoldBalance(senderId_db, -goldValue, `gift_sent_${giftId}`);
+            
+            // 2. Alıcıya XP ekle (%70 değerinde XP, %30 sistem komisyonu)
+            const recipientXP = Math.floor(goldValue * 0.7);
+            await pool.query('UPDATE users SET xp = xp + $1 WHERE id = $2', [recipientXP, targetId_db]);
+            
+            // 3. Her iki tarafa sinyal gönder
+            io.to(targetId).emit('receive_gift', { 
+                giftId, 
+                from: senderUsername, 
+                xpGained: recipientXP 
+            });
+            
+            socket.emit('gift_sent_success', { 
+                newBalance, 
+                msg: `${targetUsername} kullanıcısına hediye gönderildi!` 
+            });
+
+            console.log(`🎁 HEDİYE: ${senderUsername} -> ${targetUsername} (${giftId}, ${goldValue} Gold)`);
+        } catch (err) {
+            socket.emit('gift_error', { msg: "İşlem başarısız! Bakiyenizi kontrol edin." });
+        }
+    });
+
+    // --- MONETIZATION: REWARDED ADS ---
+    socket.on('reward_ad_watched', async (data) => {
+        // data: { userId_db }
+        try {
+            const reward = 5;
+            const newBalance = await UserRepository.updateGoldBalance(data.userId_db, reward, 'reward_ad');
+            socket.emit('ad_reward_success', { newBalance, reward });
+            console.log(`📺 REKLAM ÖDÜLÜ: ${data.userId_db} (+5 Gold)`);
+        } catch (err) {
+            console.error("Ad Reward Error:", err);
+        }
     });
 
     // --- PRIVATE CALLS (DM) ---
@@ -304,7 +387,10 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('🔴 Çıktı:', socket.id);
+        stopCallBilling(socket.id);
         waitingPool = waitingPool.filter(w => w.socketId !== socket.id);
+        // Redis kuyruğundan da temizle (Eğer arama yaparken çıktıysa)
+        // Not: Redis temizliği için zRem can be expensive here, ideally done on reconnect or via TTL
         for (const id in gameWaitingPools) { if (gameWaitingPools[id] === socket.id) gameWaitingPools[id] = null; }
         for (const r in rooms) { if (rooms[r].some(u => u.id === socket.id)) leaveRoom(socket, r); }
     });

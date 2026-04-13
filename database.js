@@ -48,6 +48,9 @@ async function initDB() {
                 weight INT,
                 gold_balance INT DEFAULT 100 CHECK (gold_balance >= 0),
                 karma_score INT DEFAULT 100,
+                is_vip BOOLEAN DEFAULT false,
+                xp INT DEFAULT 0,
+                total_spent_gold INT DEFAULT 0,
                 city_id VARCHAR(5) NOT NULL,
                 is_online BOOLEAN DEFAULT false,
                 is_busy BOOLEAN DEFAULT false,
@@ -78,8 +81,8 @@ async function initDB() {
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 amount INT NOT NULL,
-                type VARCHAR(20) NOT NULL CHECK (type IN ('purchase', 'spend', 'refund')),
-                reason VARCHAR(50) NOT NULL, -- Örn: 'city_filter', 'gift', 'in_app_purchase'
+                type VARCHAR(20) NOT NULL CHECK (type IN ('purchase', 'spend', 'refund', 'gift', 'ad_reward')),
+                reason VARCHAR(100) NOT NULL, -- Örn: 'city_filter', 'gift_sent', 'reward_ad'
                 timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);

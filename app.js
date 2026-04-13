@@ -146,7 +146,15 @@ function updateProfileUI() {
         const progressFill = document.getElementById('xp-fill');
         const avatarImg = document.getElementById('user-avatar-img');
 
-        if (uText) uText.innerText = currentUser.username;
+        if (uText) {
+            uText.innerText = currentUser.username;
+            if (currentUser.is_vip) {
+                uText.classList.add('vip-glow');
+                uText.innerHTML += ' <span class="vip-badge">VIP</span>';
+            } else {
+                uText.classList.remove('vip-glow');
+            }
+        }
         if (bioText) {
             const age = currentUser.age || 'Gizli';
             const ht = currentUser.height ? currentUser.height + 'cm' : 'Gizli';
@@ -155,6 +163,8 @@ function updateProfileUI() {
         }
         if (avatarImg) {
             avatarImg.src = currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
+            if (currentUser.is_vip) avatarImg.classList.add('vip-avatar-gold');
+            else avatarImg.classList.remove('vip-avatar-gold');
         }
 
         const currentXP = currentUser.xp || 0;
@@ -818,6 +828,32 @@ document.addEventListener('DOMContentLoaded', () => {
             globalSocket.emit('get_rooms_info');
         });
 
+        // --- MONETIZATION LISTENERS ---
+        globalSocket.on('balance_update', (data) => {
+            if (currentUser) {
+                currentUser.gold = data.newBalance;
+                document.querySelectorAll('.user-gold-val').forEach(el => el.innerText = data.newBalance);
+            }
+        });
+
+        globalSocket.on('insufficient_funds_stop', (data) => {
+            alert("⚠️ " + data.msg);
+            if (webrtcClient) webrtcClient.hangUp();
+            showTab('home-screen');
+        });
+
+        globalSocket.on('receive_gift', (data) => {
+            const toast = document.createElement('div');
+            toast.className = 'gift-toast';
+            toast.innerHTML = `<i class="fa-solid fa-gift"></i> ${data.from} size bir hediye gönderdi! (+${data.xpGained} XP)`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+            if (currentUser) {
+                currentUser.xp = (currentUser.xp || 0) + data.xpGained;
+                updateProfileUI();
+            }
+        });
+
         // Gerçek Sunucudan "Eşleşme Bulundu" Sinyali Geldiğinde:
         globalSocket.on('match_found', (data) => {
             console.log("Sunucudan eşleşme geldi! Hedef:", data.opponentId);
@@ -910,8 +946,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (data.role === 'caller') {
-                    console.log("📞 Arayan rolü: startCall başlatılıyor.");
-                    webrtcClient.startCall(data.opponentId);
+                    console.log("🏁 Görüşme Başladı Signal!");
+            // Sinyal gönder ki Billing başlasın
+            globalSocket.emit('call_confirmed', { 
+                targetId: data.opponentId, 
+                userId_db: currentUser.id_db || currentUser.username // Demo için username
+            });
+            if (webrtcClient) webrtcClient.startCall(data.opponentId, data.role);
                 } else {
                     console.log("👂 Aranan rolü: Teklif (Offer) bekleniyor.");
                     webrtcClient.targetId = data.opponentId;
