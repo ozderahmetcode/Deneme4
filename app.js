@@ -14,17 +14,118 @@ const fallbackRadios = {
 
 let currentRoomsData = {};
 let globalSocket = null;
+let trendChart, mixChart, gaugeChart;
+
+// ---- GLOBAL NAVIGATION & STATE (Zırhlı Yapı v2.1) ----
+let localConfirmed = false, remoteConfirmed = false;
+let autoStartTimer = null;
+
+function showTab(targetId, isGoingBack = false) {
+    if (typeof hideOverlays === "function") hideOverlays();
+    const navItem = document.querySelector(`.nav-item[data-target="${targetId}"]`);
+    if (!navItem) return;
+    
+    // UI Logic (Garantili Navigasyon)
+    const allScreens = [document.getElementById('home-screen'), document.getElementById('rooms-screen'), document.getElementById('menu-screen'), document.getElementById('messages-screen'), document.getElementById('profile-screen')];
+    allScreens.forEach(s => { if (s) { s.classList.remove('active'); s.classList.add('hidden'); } });
+    
+    const targetScreen = document.getElementById(targetId);
+    if (targetScreen) {
+        targetScreen.classList.remove('hidden');
+        setTimeout(() => targetScreen.classList.add('active'), 10);
+    }
+}
+
+function showOverlay(screenToShow) {
+    const overlayScreens = [document.getElementById('matching-screen'), document.getElementById('incall-screen'), document.getElementById('rating-screen'), document.getElementById('room-inner-screen'), document.getElementById('active-chat-screen'), document.getElementById('game-matching-screen'), document.getElementById('game-screen')];
+    overlayScreens.forEach(screen => {
+        if (screen) {
+            screen.classList.remove('active');
+            screen.classList.add('hidden');
+            screen.style.zIndex = "20"; 
+            screen.style.display = ""; 
+        }
+    });
+    if (screenToShow) {
+        if (screenToShow.id === 'rating-screen') {
+            try { if (typeof updateStatsUI === "function") updateStatsUI(); } catch(e) {}
+            screenToShow.style.zIndex = "500"; 
+            screenToShow.style.display = "flex"; 
+        }
+        screenToShow.classList.remove('hidden');
+        void screenToShow.offsetWidth;
+        screenToShow.classList.add('active');
+    }
+}
+
+function hideOverlays() { showOverlay(null); }
+
+// ---- GLOBAL CALL LOGIC (Zırhlı Yapı v2.1) ----
+let globalTimeLeft = 0;
+let activeTimerInterval = null;
+
+function startGlobalTimer(seconds, elementId) {
+    clearInterval(activeTimerInterval);
+    globalTimeLeft = seconds;
+    const display = document.getElementById(elementId);
+    if (display) {
+        display.innerText = globalTimeLeft;
+        display.style.fontSize = "3rem";
+    }
+    activeTimerInterval = setInterval(() => {
+        globalTimeLeft--;
+        if (display) display.innerText = globalTimeLeft;
+        if (globalTimeLeft <= 0) {
+            clearInterval(activeTimerInterval);
+            if (typeof webrtcClient !== "undefined" && webrtcClient) webrtcClient.hangUp();
+            if (typeof showOverlay === "function") showOverlay(document.getElementById('rating-screen'));
+        }
+    }, 1000);
+}
+
+function stopGlobalTimer() { clearInterval(activeTimerInterval); }
+
+function checkMutualConfirmation() {
+    if (localConfirmed && remoteConfirmed) {
+        console.log("✅ Karşılıklı onay sağlandı! Sayaç başlıyor.");
+        startGlobalTimer(120, 'active-countdown');
+    }
+}
+
+// ---- GLOBAL RATING ACTIONS (TOTAL FIX) ----
+window.rateLike = function() {
+    console.log("👍 Beğenildi...");
+    if (typeof stats !== "undefined") { stats.likes++; saveStats(); }
+    showTab('home-screen');
+};
+window.rateDislike = function() {
+    console.log("👎 Beğenilmedi...");
+    if (typeof stats !== "undefined") { stats.skips++; saveStats(); }
+    showTab('home-screen');
+};
+window.skipRating = function() { showTab('home-screen'); };
+window.addFriendInCall = function() {
+    if (typeof lastMatchData === "undefined" || !lastMatchData || !globalSocket) return;
+    globalSocket.emit('friend_request', { 
+        targetId: (typeof webrtcClient !== "undefined" && webrtcClient) ? webrtcClient.targetId : null, 
+        senderName: currentUser.username,
+        senderAvatar: currentUser.avatarUrl
+    });
+    alert("Arkadaşlık isteği gönderildi!");
+};
+
+let usersDB = JSON.parse(localStorage.getItem('blindIdUsers')) || {};
+let currentUser = JSON.parse(localStorage.getItem('blindIdSession')) || null;
+let liteMode = JSON.parse(localStorage.getItem('blindIdLiteMode')) || false;
+let stats = (currentUser && currentUser.username) ? (JSON.parse(localStorage.getItem(currentUser.username + '_stats')) || { totalCalls: 0, talkTimeSeconds: 0, likes: 0, dislikes: 0, skips: 0, reports: 0, callsDone: 0 }) : null;
+let statsChart = null;
+let authScreen, screensContainer, mainNav;
 
 document.addEventListener('DOMContentLoaded', () => {
     // ---- DOM & DATA ----
-    const authScreen = document.getElementById('auth-screen');
-    const screensContainer = document.getElementById('screens-container');
-    const mainNav = document.getElementById('main-nav');
-
-    let usersDB = JSON.parse(localStorage.getItem('blindIdUsers')) || {};
-    let currentUser = JSON.parse(localStorage.getItem('blindIdSession')) || null;
-    let liteMode = JSON.parse(localStorage.getItem('blindIdLiteMode')) || false;
-    let statsChart = null;
+    authScreen = document.getElementById('auth-screen');
+    screensContainer = document.getElementById('screens-container');
+    mainNav = document.getElementById('main-nav');
 
     // Girişte izni sadece mikrofon için istiyoruz (Blind ID standardı)
     function requestPermissions() {
@@ -793,6 +894,16 @@ document.addEventListener('DOMContentLoaded', () => {
             remoteConfirmed = false;
             const countdownEl = document.getElementById('active-countdown');
             if (countdownEl) countdownEl.innerText = "Bekleniyor...";
+
+            // EMNİYET KİLİDİ: 10 saniye içinde onay gelmezse otomatiğe bağla
+            clearTimeout(autoStartTimer);
+            autoStartTimer = setTimeout(() => {
+                if (!remoteConfirmed || !localConfirmed) {
+                    console.log("⚠️ 10 Saniye Geçti: Emniyet sayacı devreye giriyor...");
+                    localConfirmed = true; remoteConfirmed = true;
+                    if (typeof checkMutualConfirmation === "function") checkMutualConfirmation();
+                }
+            }, 10000);
 
             // Karşı mikrofon ikonunu sıfırla
             const micIcon = document.getElementById('opp-mic-status');
@@ -2082,16 +2193,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 else { statusChip.innerText = "GÜVENLİ"; statusChip.style.color = "#00b894"; }
             }
 
-            // --- CHARTS (V3 Premium) ---
+            // --- CHARTS (V3 Premium - Fix v2.1) ---
             try {
                 const trendCtx = document.getElementById('activityTrendChart');
-                if (trendCtx) {
+                if (trendCtx && typeof Chart !== "undefined") {
                     const ctx = trendCtx.getContext('2d');
                     const gradient = ctx.createLinearGradient(0, 0, 0, 120);
                     gradient.addColorStop(0, 'rgba(186,148,91,0.5)');
                     gradient.addColorStop(1, 'rgba(186,148,91,0)');
 
-                    if (trendChart) trendChart.destroy();
+                    if (typeof trendChart !== "undefined" && trendChart) trendChart.destroy();
                     trendChart = new Chart(trendCtx, {
                         type: 'line',
                         data: {
@@ -2101,15 +2212,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 data: [35, 55, 45, 80, 65, 95, 85],
                                 borderColor: '#BA945B',
                                 backgroundColor: gradient,
-                                fill: true,
-                                tension: 0.5,
-                                borderWidth: 3,
-                                pointRadius: 0
+                                fill: true, tension: 0.5, borderWidth: 3, pointRadius: 0
                             }]
                         },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
+                            responsive: true, maintainAspectRatio: false,
                             plugins: { legend: { display: false } },
                             scales: {
                                 x: { grid: { display: false }, ticks: { color: '#555', font: { size: 8 } } },
@@ -2120,14 +2227,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const mixCtx = document.getElementById('interactionMixChart');
-                if (mixCtx) {
-                    if (mixChart) mixChart.destroy();
+                if (mixCtx && typeof Chart !== "undefined") {
+                    if (typeof mixChart !== "undefined" && mixChart) mixChart.destroy();
                     mixChart = new Chart(mixCtx, {
                         type: 'doughnut',
                         data: {
                             labels: ['+', '-', '!'],
                             datasets: [{
                                 data: [likes || 5, dislikes || 2, reports || 1],
+                                backgroundColor: ['#BA945B', '#444', '#ff4757'],
+                                borderWidth: 0, cutout: '75%', borderRadius: 10
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } }
+                        }
+                    });
+                }
+            } catch (e) { console.log("Chart Error:", e); }
                                 backgroundColor: ['#BA945B', '#444', '#ff4757'],
                                 borderWidth: 0,
                                 cutout: '75%',
