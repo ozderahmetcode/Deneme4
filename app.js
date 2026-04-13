@@ -310,21 +310,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (screen) {
                 screen.classList.remove('active');
                 screen.classList.add('hidden');
+                screen.style.zIndex = "20"; 
+                screen.style.display = ""; // Reset inline display
             }
         });
         if (screenToShow) {
             if (mainNav) mainNav.style.display = 'none';
             if (screenToShow.id === 'rating-screen') {
-                updateRatingDisplay();
+                try { updateRatingDisplay(); } catch(e) { console.log("Rating Update Error:", e); }
+                screenToShow.style.zIndex = "500"; 
+                screenToShow.style.display = "flex"; 
             }
             screenToShow.classList.remove('hidden');
-            // Force reflow for transition
             void screenToShow.offsetWidth;
             screenToShow.classList.add('active');
         } else {
             if (mainNav && !stats.banStatus && currentUser) mainNav.style.display = 'flex';
         }
     }
+    window.showOverlay = showOverlay; // Global access fix
     window.hideOverlays = function () { showOverlay(null); };
 
     // ---- ICE BREAKER ----
@@ -862,14 +866,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function updateRatingDisplay() {
-            const total = (stats.likes || 0) + (stats.skips || 0);
-            const likePct = total === 0 ? 0 : Math.round((stats.likes / total) * 100);
-            const dislikePct = total === 0 ? 0 : Math.round((stats.skips / total) * 100);
+            try {
+                const total = (stats.likes || 0) + (stats.skips || 0) + (stats.dislikes || 0);
+                const likePct = total === 0 ? 0 : Math.round((stats.likes / total) * 100);
+                const dislikePct = total === 0 ? 0 : Math.round(((stats.skips + stats.dislikes) / total) * 100);
 
-            const lpEl = document.getElementById('rating-like-pct');
-            const dpEl = document.getElementById('rating-dislike-pct');
-            if (lpEl) lpEl.innerText = `%${likePct}`;
-            if (dpEl) dpEl.innerText = `%${dislikePct}`;
+                const lpEl = document.getElementById('rating-like-pct');
+                const dpEl = document.getElementById('rating-dislike-pct');
+                if (lpEl) lpEl.innerText = `%${likePct}`;
+                if (dpEl) dpEl.innerText = `%${dislikePct}`;
+                console.log("📊 Puanlama oranları güncellendi:", likePct, dislikePct);
+            } catch(e) {
+                console.error("❌ Puanlama Görüntüleme Hatası:", e);
+            }
         }
 
         window.rateLike = function () {
