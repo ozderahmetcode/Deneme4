@@ -19,6 +19,10 @@ let trendChart, mixChart, gaugeChart;
 // ---- GLOBAL NAVIGATION & STATE (Zırhlı Yapı v2.1) ----
 let localConfirmed = false, remoteConfirmed = false;
 let autoStartTimer = null;
+let webrtcClient = null;
+let roomClient = null;
+let lastMatchData = null;
+let privateCallClient = null;
 
 function showTab(targetId, isGoingBack = false) {
     if (typeof hideOverlays === "function") hideOverlays();
@@ -455,9 +459,6 @@ document.addEventListener('DOMContentLoaded', () => {
             startGlobalTimer(120, 'active-countdown');
         }
     }
-    let webrtcClient = null;
-    let roomClient = null; // Mesh Room Audio
-    let lastMatchData = null;
     let matchGenderPref = 'mixed'; // Default to mixed for better match rate
     let matchRegionFilter = false;
 
@@ -1857,7 +1858,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // --- ÖZELDEN ARAMA / GÖRÜNTÜLÜ ---
-        let privateCallClient = null;
         let currentCallTargetId = null;
 
         function initPrivateCallClient() {
