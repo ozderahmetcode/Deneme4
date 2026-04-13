@@ -1103,10 +1103,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- ROOMS & AUDIO MANAGEMENT ----
     // ---- ROOMS & AUDIO MANAGEMENT (WebRTC Mesh) ----
-            window.activeRoomParticipants = [];
-            window.activeRoomId = null;
-        }
-    }
+    window.activeRoomParticipants = [];
+    window.activeRoomId = null;
 
     roomClient = null;
 
