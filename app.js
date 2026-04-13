@@ -521,13 +521,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (room.vip) card.style.borderLeft = "4px solid var(--gold)";
                 else if (room.radio) card.style.borderLeft = "4px solid var(--primary)";
 
+                // Capacity Overrides
+                let displayCap = room.cap;
+                if (!room.vip && !room.radio && displayCap == 10) displayCap = 5;
+                if (room.name.includes("Genel Sohbet")) displayCap = 15;
+
                 card.innerHTML = `
                     <div class="room-info">
                         <h3>${room.name}</h3>
                         <p>${room.vip ? '🏅 VIP Odası' : (room.radio ? '📻 Müzik & Sohbet' : '👥 Genel Sohbet')}</p>
                     </div>
                     <div class="room-stats">
-                        <div class="member-count"><span id="room-count-${id}">${room.userCount || 0}</span>/${room.cap} <i class="fa-solid fa-user"></i></div>
+                        <div class="member-count"><span id="room-count-${id}">${room.userCount || 0}</span>/${displayCap} <i class="fa-solid fa-user"></i></div>
                     </div>
                 `;
 
