@@ -52,6 +52,7 @@ function showOverlay(screenToShow) {
     });
     if (screenToShow) {
         if (screenToShow.id === 'rating-screen') {
+            try { if (typeof updateRatingDisplay === "function") updateRatingDisplay(); } catch(e) {}
             try { if (typeof updateStatsUI === "function") updateStatsUI(); } catch(e) {}
             screenToShow.style.zIndex = "500"; 
             screenToShow.style.display = "flex"; 
@@ -96,18 +97,6 @@ function checkMutualConfirmation() {
     }
 }
 
-// ---- GLOBAL RATING ACTIONS (TOTAL FIX) ----
-window.rateLike = function() {
-    console.log("👍 Beğenildi...");
-    if (typeof stats !== "undefined") { stats.likes++; saveStats(); }
-    showTab('home-screen');
-};
-window.rateDislike = function() {
-    console.log("👎 Beğenilmedi...");
-    if (typeof stats !== "undefined") { stats.skips++; saveStats(); }
-    showTab('home-screen');
-};
-window.skipRating = function() { showTab('home-screen'); };
 window.addFriendInCall = function() {
     if (typeof lastMatchData === "undefined" || !lastMatchData || !globalSocket) return;
     globalSocket.emit('friend_request', { 
@@ -117,6 +106,138 @@ window.addFriendInCall = function() {
     });
     alert("Arkadaşlık isteği gönderildi!");
 };
+
+// ---- GLOBAL DATA MANAGEMENT (Garantili Onarım v4) ----
+function saveUser() {
+    if (!currentUser || !usersDB) return;
+    usersDB[currentUser.username] = currentUser;
+    localStorage.setItem('blindIdUsers', JSON.stringify(usersDB));
+    localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
+    if (typeof updateProfileUI === "function") updateProfileUI();
+}
+
+function saveStats() {
+    if (!currentUser || !stats) return;
+    localStorage.setItem(currentUser.username + '_stats', JSON.stringify(stats));
+    if (typeof updateStatsUI === "function") updateStatsUI();
+}
+
+function updateRatingDisplay() {
+    try {
+        if (!stats) return;
+        const total = (stats.likes || 0) + (stats.skips || 0) + (stats.dislikes || 0);
+        const likePct = total === 0 ? 0 : Math.round((stats.likes / total) * 100);
+        const dislikePct = total === 0 ? 0 : Math.round(((stats.skips + stats.dislikes) / total) * 100);
+
+        const lpEl = document.getElementById('rating-like-pct');
+        const dpEl = document.getElementById('rating-dislike-pct');
+        if (lpEl) lpEl.innerText = `%${likePct}`;
+        if (dpEl) dpEl.innerText = `%${dislikePct}`;
+        console.log("📊 Puanlama oranları güncellendi:", likePct, dislikePct);
+    } catch(e) { console.error("❌ Puanlama Görüntüleme Hatası:", e); }
+}
+
+function updateProfileUI() {
+    if (!currentUser) return;
+    try {
+        const uText = document.getElementById('profile-username-text');
+        const bioText = document.getElementById('profile-bio-text');
+        const xpText = document.getElementById('user-xp');
+        const progressFill = document.getElementById('xp-fill');
+        const avatarImg = document.getElementById('user-avatar-img');
+
+        if (uText) uText.innerText = currentUser.username;
+        if (bioText) {
+            const age = currentUser.age || 'Gizli';
+            const ht = currentUser.height ? currentUser.height + 'cm' : 'Gizli';
+            const wt = currentUser.weight ? currentUser.weight + 'kg' : 'Gizli';
+            bioText.innerHTML = `Yaş: ${age} | Boy: ${ht} | Kilo: ${wt}<br>${currentUser.bio || 'Henüz bir bio eklenmemiş...'}`;
+        }
+        if (avatarImg) {
+            avatarImg.src = currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
+        }
+
+        const currentXP = currentUser.xp || 0;
+        const level = Math.floor(currentXP / 1000) + 1;
+        const xpInLevel = currentXP % 1000;
+
+        if (document.getElementById('user-level')) document.getElementById('user-level').innerText = level;
+        if (xpText) xpText.innerText = xpInLevel;
+        if (progressFill) progressFill.style.width = `${(xpInLevel / 1000) * 100}%`;
+    } catch(e) { console.error("Profile UI Error:", e); }
+}
+
+function renderHistory() {
+    try {
+        const container = document.getElementById('recent-matches-container');
+        if (!container || !currentUser) return;
+        container.innerHTML = '';
+        const validHistory = (currentUser.history || []).filter(h => h.name && h.name !== 'Anonim');
+        if (validHistory.length === 0) { container.style.display = 'none'; return; }
+        container.style.display = 'flex';
+        validHistory.slice(-3).forEach(h => {
+            container.innerHTML += `
+            <div class="history-item" onclick="premiumAlert('Geçmiş eşleşmeye tekrar bağlanmak VIP özelliğidir.')">
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${h.name}&backgroundColor=111">
+                <span>${h.name}</span> <i class="fa-solid fa-phone"></i>
+            </div>`;
+        });
+    } catch(e) {}
+}
+
+function renderFriendsList() {
+    try {
+        const list = document.getElementById('friends-list');
+        const count = document.getElementById('friends-count');
+        if (!list || !currentUser) return;
+        list.innerHTML = '';
+        const friends = currentUser.friends || [];
+        count.innerText = friends.length;
+        if (friends.length === 0) {
+            list.innerHTML = '<div style="text-align:center; padding:50px; color:#555; font-size:0.7rem;">Henüz kimseyi eklemedin.</div>';
+            return;
+        }
+        friends.forEach(f => {
+            list.innerHTML += `
+                <div class="friend-card-premium">
+                    <div class="f-info">
+                        <img src="${f.avatar}" class="f-avatar">
+                        <div>
+                            <div class="f-name">${f.username}</div>
+                            <div class="f-trust"><i class="fa-solid fa-shield-halved"></i> Güven: ${f.trust || '98%'}</div>
+                        </div>
+                    </div>
+                    <div class="f-actions">
+                        <button class="f-btn dm" onclick="switchMainTab('messages')" title="Mesaj Gönder"><i class="fa-solid fa-paper-plane"></i></button>
+                        <button class="f-btn delete" onclick="removeFriend('${f.username}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                </div>
+            `;
+        });
+    } catch(e) {}
+}
+
+function updateStatsUI() {
+    try {
+        if (!stats) return;
+        const callCount = stats.totalCalls || 0;
+        const likes = stats.likes || 0;
+        const dislikes = stats.dislikes || 0;
+        const reports = stats.reports || 0;
+        const totalInt = likes + dislikes + reports;
+
+        const mapping = {
+            'stat-like-count': likes,
+            'stat-dislike-count': dislikes,
+            'stat-completion-val': callCount > 0 ? '%92' : '%0',
+            'stat-talk-time': callCount > 0 ? `${Math.floor(stats.talkTimeSeconds / callCount)}s` : '0s'
+        };
+        for (const id in mapping) {
+            const el = document.getElementById(id);
+            if (el) el.innerText = mapping[id];
+        }
+    } catch(e) { console.log("Stats UI Update Error:", e); }
+}
 
 let usersDB = JSON.parse(localStorage.getItem('blindIdUsers')) || {};
 let currentUser = JSON.parse(localStorage.getItem('blindIdSession')) || null;
@@ -165,70 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function saveUser() {
-        usersDB[currentUser.username] = currentUser;
-        localStorage.setItem('blindIdUsers', JSON.stringify(usersDB));
-        localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
-        updateProfileUI();
-    }
 
-    function updateProfileUI() {
-        if (!currentUser) return;
-        const uText = document.getElementById('profile-username-text');
-        const bioText = document.getElementById('profile-bio-text');
-        const xpText = document.getElementById('user-xp');
-        const progressFill = document.getElementById('xp-fill');
-        const avatarImg = document.getElementById('user-avatar-img');
-
-        if (uText) uText.innerText = currentUser.username;
-        if (bioText) {
-            const age = currentUser.age || 'Gizli';
-            const ht = currentUser.height ? currentUser.height + 'cm' : 'Gizli';
-            const wt = currentUser.weight ? currentUser.weight + 'kg' : 'Gizli';
-            bioText.innerHTML = `Yaş: ${age} | Boy: ${ht} | Kilo: ${wt}<br>${currentUser.bio || 'Henüz bir bio eklenmemiş...'}`;
-        }
-
-        if (avatarImg) {
-            avatarImg.src = currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
-        }
-
-        // Level System
-        const currentXP = currentUser.xp || 0;
-        const level = Math.floor(currentXP / 1000) + 1;
-        const xpInLevel = currentXP % 1000;
-
-        if (document.getElementById('user-level')) document.getElementById('user-level').innerText = level;
-        if (xpText) xpText.innerText = xpInLevel;
-        if (progressFill) progressFill.style.width = `${(xpInLevel / 1000) * 100}%`;
-    }
-
-    window.addXP = function (amt) {
-        currentUser.xp = (currentUser.xp || 0) + amt;
-        saveUser();
-        updateProfileUI();
-    }
-
-    function renderHistory() {
-        const container = document.getElementById('recent-matches-container');
-        if (!container) return;
-        container.innerHTML = '';
-
-        const validHistory = (currentUser.history || []).filter(h => h.name && h.name !== 'Anonim');
-
-        if (validHistory.length === 0) {
-            container.style.display = 'none';
-            return;
-        }
-        container.style.display = 'flex';
-
-        validHistory.slice(-3).forEach(h => {
-            container.innerHTML += `
-            <div class="history-item" onclick="premiumAlert('Geçmiş eşleşmeye tekrar bağlanmak VIP özelliğidir.')">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${h.name}&backgroundColor=111">
-                <span>${h.name}</span> <i class="fa-solid fa-phone"></i>
-            </div>`;
-        });
-    }
 
     window.premiumAlert = function (msg) {
         alert("💎 VIP PREMIUM: " + msg);
@@ -313,11 +371,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- STATS / BAN ----
     let stats = JSON.parse(localStorage.getItem('blindIdStats')) || { totalCalls: 0, talkTimeSeconds: 0, likes: 0, skips: 0, reports: 0, dislikes: 0, banStatus: null };
     if (stats.dislikes === undefined) stats.dislikes = 0;
-    function saveStats() {
-        localStorage.setItem('blindIdStats', JSON.stringify(stats));
-        if (typeof checkBanLogic === 'function') checkBanLogic();
-        updateStatsUI();
-    }
     function checkBanLogic() {
         if (stats.totalCalls < 100 || stats.banStatus === 'perma') return;
         const rr = (stats.reports / stats.totalCalls) * 100;
@@ -1052,21 +1105,6 @@ document.addEventListener('DOMContentLoaded', () => {
             saveStats();
         }
 
-        function updateRatingDisplay() {
-            try {
-                const total = (stats.likes || 0) + (stats.skips || 0) + (stats.dislikes || 0);
-                const likePct = total === 0 ? 0 : Math.round((stats.likes / total) * 100);
-                const dislikePct = total === 0 ? 0 : Math.round(((stats.skips + stats.dislikes) / total) * 100);
-
-                const lpEl = document.getElementById('rating-like-pct');
-                const dpEl = document.getElementById('rating-dislike-pct');
-                if (lpEl) lpEl.innerText = `%${likePct}`;
-                if (dpEl) dpEl.innerText = `%${dislikePct}`;
-                console.log("📊 Puanlama oranları güncellendi:", likePct, dislikePct);
-            } catch(e) {
-                console.error("❌ Puanlama Görüntüleme Hatası:", e);
-            }
-        }
 
 
         window.showReportOptions = function () {
@@ -2397,19 +2435,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     } // end window.io
 
-    // --- GLOBAL RATING ACTIONS (TOTAL FIX) ---
+    // --- GLOBAL RATING ACTIONS (SURVIVOR MODE v4) ---
     window.rateLike = function() {
         console.log("👍 Beğenildi...");
-        stats.likes++;
-        saveStats();
+        try {
+            if (stats) { stats.likes++; saveStats(); }
+            if (typeof updateRatingDisplay === "function") updateRatingDisplay();
+        } catch(e) { console.error("Rate Error (Recovered):", e); }
         showTab('home-screen');
     };
+
     window.rateDislike = function() {
         console.log("👎 Beğenilmedi...");
-        stats.skips++;
-        saveStats();
+        try {
+            if (stats) { stats.dislikes++; saveStats(); }
+            if (typeof updateRatingDisplay === "function") updateRatingDisplay();
+        } catch(e) { console.error("Rate Error (Recovered):", e); }
         showTab('home-screen');
     };
+
     window.skipRating = function() {
         showTab('home-screen');
     };
