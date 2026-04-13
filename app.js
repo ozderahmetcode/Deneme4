@@ -1062,52 +1062,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     window.updateProfileUI = updateProfileUI;
-    // ---- REPORT & RATINGS ----
-    window.showReportOptions = function () { document.getElementById('report-modal').classList.remove('hidden'); }
-    window.closeReportOptions = function () { document.getElementById('report-modal').classList.add('hidden'); }
-    window.submitReport = function (reason) {
-        alert(reason + " sebebiyle raporlandı. Kullanıcı karma puanı incelenecek!");
-        stats.reports++; saveStats();
-        closeReportOptions();
-        hideOverlays();
-    }
-
-    // Beğeni / Beğenmeme
-    window.rateLike = function () {
-        stats.likes++; saveStats();
-        updateRatingDisplay();
-        setTimeout(() => {
-            hideOverlays();
-            showTab('home-screen');
-        }, 800);
-    }
-    window.rateDislike = function () {
-        stats.dislikes++; saveStats();
-        updateRatingDisplay();
-        setTimeout(() => {
-            hideOverlays();
-            showTab('home-screen');
-        }, 800);
-    }
-
-    function updateRatingDisplay() {
-        const total = (stats.likes || 0) + (stats.dislikes || 0);
-        const likeEl = document.getElementById('rating-like-pct');
-        const dislikeEl = document.getElementById('rating-dislike-pct');
-        if (!likeEl || !dislikeEl) return;
-
-        if (total === 0) {
-            likeEl.innerText = '%0';
-            dislikeEl.innerText = '%0';
-        } else {
-            const likePct = Math.round((stats.likes / total) * 100);
-            const dislikePct = 100 - likePct;
-            likeEl.innerText = `%${likePct}`;
-            dislikeEl.innerText = `%${dislikePct}`;
-        }
-    }
-
-
     window.addFriend = function () {
         if (!lastMatchData) {
             alert("Eklenecek kullanıcı bulunamadı.");
