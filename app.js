@@ -1804,42 +1804,82 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        window.addMockStats = function () {
-            stats.totalCalls += 10;
-            stats.likes += 6;
-            stats.dislikes += 2;
-            stats.skips += 2;
-            stats.talkTimeSeconds += 1200;
-            saveStats();
-            updateStatsUI();
-            alert("Mock veriler pırıl pırıl eklendi! ✨");
+        // --- DAILY QUESTS SYSTEM (Restored & Enhanced) ---
+        const questTemplates = [
+            { id: 'q1', text: "3 farklı kişiyle görüşme yap", goal: 3, reward: 50, type: 'calls' },
+            { id: 'q2', text: "Toplam 5 dakika sohbet et", goal: 300, reward: 100, type: 'duration' },
+            { id: 'q3', text: "2 farklı odayı ziyaret et", goal: 2, reward: 30, type: 'rooms' },
+            { id: 'q4', text: "Profilini %100 tamamla", goal: 1, reward: 40, type: 'profile' },
+            { id: 'q5', text: "Birine DM sesli mesaj gönder", goal: 1, reward: 60, type: 'dm' }
+        ];
+
+        window.initDailyQuests = function () {
+            if (!currentUser) return;
+            const container = document.getElementById('quest-list');
+            if (!container) return;
+
+            // Generate or fetch daily quests
+            if (!currentUser.dailyQuests || currentUser.questDate !== new Date().toDateString()) {
+                const shuffled = questTemplates.sort(() => 0.5 - Math.random());
+                currentUser.dailyQuests = shuffled.slice(0, 3).map(q => ({ ...q, current: 0, completed: false }));
+                currentUser.questDate = new Date().toDateString();
+                saveUser();
+            }
+
+            renderQuests();
         }
 
-        let trendChart = null;
-        let mixChart = null;
-        let gaugeChart = null;
+        function renderQuests() {
+            const container = document.getElementById('quest-list');
+            if (!container) return;
+            container.innerHTML = '';
 
+            currentUser.dailyQuests.forEach(q => {
+                const pct = Math.min(100, (q.current / q.goal) * 100);
+                container.innerHTML += `
+                    <div class="premium-quest-item ${q.completed ? 'completed' : ''}">
+                        <div class="q-lhs">
+                            <h4>${q.text}</h4>
+                            <p>${q.completed ? '✓ Tamamlandı' : 'Aksiyon Bekleniyor...'}</p>
+                        </div>
+                        <div class="q-rhs">
+                            <div class="q-reward">+${q.reward} <i class="fa-solid fa-coins" style="color:var(--gold)"></i></div>
+                            <div class="q-progress">${q.current}/${q.goal}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // --- STATS LOGIC V3 ---
         function updateStatsUI() {
             if (!stats) return;
             if (typeof Chart === "undefined") return;
 
             const callCount = stats.totalCalls || 0;
-            const totalInteraction = (stats.likes || 0) + (stats.dislikes || 0) + (stats.reports || 0);
+            const likes = stats.likes || 0;
+            const dislikes = stats.dislikes || 0;
+            const reports = stats.reports || 0;
+            const totalInt = likes + dislikes + reports;
 
-            // Metrics
-            const likePct = totalInteraction > 0 ? ((stats.likes / totalInteraction) * 100).toFixed(0) : 0;
+            // Calculations
+            const likePct = totalInt > 0 ? ((likes / totalInt) * 100).toFixed(0) : 0;
+            const dislikePct = totalInt > 0 ? ((dislikes / totalInt) * 100).toFixed(0) : 0;
+            const reportPct = totalInt > 0 ? ((reports / totalInt) * 100).toFixed(1) : 0;
             const completionPct = callCount > 0 ? 92 : 0; 
             const avgDuration = callCount > 0 ? Math.floor(stats.talkTimeSeconds / callCount) : 0;
-            const reportPct = totalInteraction > 0 ? ((stats.reports / totalInteraction) * 100).toFixed(1) : 0;
-            const trustScore = (100 - ((stats.reports || 0) * 8) - ((stats.dislikes || 0) * 0.5)).toFixed(0);
+            const trustScore = (100 - (reports * 10) - (dislikes * 1)).toFixed(0);
 
-            // UI Elements
+            // Detailed UI Mapping
             const mapping = {
-                'stat-like-ratio': `%${likePct} Beğeni`,
-                'stat-completion': `%${completionPct} Tamamlama`,
+                'stat-like-count': likes,
+                'stat-like-ratio': `%${likePct} Beğeni Oranı`,
+                'stat-dislike-count': dislikes,
+                'stat-dislike-ratio': `%${dislikePct} Beğenmeme`,
+                'stat-completion-val': `%${completionPct}`,
                 'stat-talk-time': `${avgDuration}s`,
                 'stat-report-rate': `%${reportPct}`,
-                'trust-score': `%${trustScore}`
+                'trust-score': `${Math.max(0, trustScore)}%`
             };
 
             for (const id in mapping) {
@@ -1847,19 +1887,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (el) el.innerText = mapping[id];
             }
 
-            const bar = document.getElementById('trust-bar-fill');
-            if (bar) bar.style.width = `${Math.max(10, trustScore)}%`;
+            // Progress Bars
+            const barMapping = {
+                'stat-like-bar': likePct,
+                'stat-dislike-bar': dislikePct,
+                'stat-completion-bar': completionPct,
+                'stat-report-bar': (parseFloat(reportPct) / 30) * 100, // Normalized to 30% max for visual
+                'trust-bar-fill': trustScore
+            };
 
-            const statusChip = document.getElementById('stat-status-chip');
-            if (statusChip) {
-                if (parseFloat(reportPct) > 5) {
-                    statusChip.innerText = "UYARI"; statusChip.style.color = "var(--red)"; statusChip.style.borderColor = "var(--red)";
-                } else {
-                    statusChip.innerText = "GÜVENLİ"; statusChip.style.color = "#00b894"; statusChip.style.borderColor = "#00b894";
-                }
+            for (const id in barMapping) {
+                const bar = document.getElementById(id);
+                if (bar) bar.style.width = `${Math.max(5, barMapping[id])}%`;
             }
 
-            // Charts
+            // Status Chip
+            const statusChip = document.getElementById('stat-status-chip');
+            if (statusChip) {
+                if (trustScore < 40) { statusChip.innerText = "KRİTİK"; statusChip.style.color = "var(--red)"; }
+                else if (trustScore < 75) { statusChip.innerText = "DÜŞÜK"; statusChip.style.color = "orange"; }
+                else { statusChip.innerText = "GÜVENLİ"; statusChip.style.color = "#00b894"; }
+            }
+
+            // --- CHARTS ---
             try {
                 const trendCtx = document.getElementById('activityTrendChart');
                 if (trendCtx) {
@@ -1871,12 +1921,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             datasets: [{
                                 label: 'Görüşme',
                                 data: [15, 25, 20, 35, 30, 45, 40],
-                                borderColor: '#00d2ff', backgroundColor: 'rgba(0, 210, 255, 0.1)',
-                                fill: true, tension: 0.4, borderWidth: 3, pointRadius: 0
+                                borderColor: '#BA945B', backgroundColor: 'rgba(186,148,91,0.1)',
+                                fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0
                             }]
                         },
                         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-                                   scales: { x: { grid: { display:false }, ticks:{ color:'#888', font:{size:9} } }, y:{ display:false } } }
+                                   scales: { x: { grid: { display:false }, ticks:{ color:'#555', font:{size:8} } }, y:{ display:false } } }
                     });
                 }
                 const mixCtx = document.getElementById('interactionMixChart');
@@ -1885,11 +1935,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     mixChart = new Chart(mixCtx, {
                         type: 'doughnut',
                         data: {
-                            labels: ['Like', 'Dislike', 'Report'],
+                            labels: ['Pozitif', 'Negatif', 'Ciddi'],
                             datasets: [{
-                                data: [stats.likes||1, stats.dislikes||0, stats.reports||0],
+                                data: [likes||1, dislikes||0, reports||0],
                                 backgroundColor: ['#BA945B', '#444', '#ff4757'],
-                                borderWidth: 0, cutout: '75%'
+                                borderWidth: 0, cutout: '80%'
                             }]
                         },
                         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
@@ -1899,15 +1949,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (gaugeCtx) {
                     if (gaugeChart) gaugeChart.destroy();
                     gaugeChart = new Chart(gaugeCtx, {
-                        type: 'doughnut',
+                        type: 'line',
                         data: {
+                            labels: ['1', '2', '3', '4', '5'],
                             datasets: [{
-                                data: [completionPct, 100 - completionPct],
-                                backgroundColor: ['#00b894', 'rgba(255,255,255,0.05)'],
-                                borderWidth: 0, circumference: 180, rotation: 270, cutout: '85%'
+                                data: [80, 85, 90, 88, 92],
+                                borderColor: '#00b894', borderWidth: 2, pointRadius: 0, tension: 0.5
                             }]
                         },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                                   scales: { x:{display:false}, y:{display:false} } }
                     });
                 }
             } catch (e) { console.error("Chart Error:", e); }

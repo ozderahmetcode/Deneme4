@@ -544,72 +544,95 @@
                         </div>
                     </div>
 
-                    <!-- TAB: GÖREVLER -->
+                    <!-- TAB: GÖREVLER (Restored) -->
                     <div id="p-content-quests" class="profile-tab-content hidden">
-                        <div class="quests-container"
-                            style="background:#fff; border-radius:24px; padding:20px; border:1px solid #eee; margin:20px;">
-                            <h3 style="color:var(--primary); margin-bottom:15px; font-size:1rem; font-weight:800;">
-                                Günlük Görevler</h3>
-                    <div id="p-content-stats" class="profile-tab-content hidden" style="padding: 10px 20px;">
-                        <!-- TOP: Activity Trend -->
-                        <div class="dash-card main-trend">
-                            <div class="dash-card-header">
-                                <i class="fa-solid fa-chart-line"></i> <span>HAFTALIK AKTİVİTE TRENDİ</span>
+                        <div class="quests-container-premium">
+                            <div class="q-header">
+                                <i class="fa-solid fa-bullseye"></i> <span>GÜNLÜK AKTİVİTE MERKEZİ</span>
                             </div>
-                            <div class="canvas-wrap">
-                                <canvas id="activityTrendChart"></canvas>
+                            <div id="quest-list" class="quest-list-scroll">
+                                <!-- JS will populate this -->
+                                <div style="text-align:center; padding:40px; color:#888; font-size:0.7rem;">Görevler yükleniyor...</div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- MIDDLE: Stats Grid -->
-                        <div class="stats-premium-grid-v2">
-                            <!-- Interaction Mix -->
-                            <div class="dash-card-mini">
-                                <div class="lbl">ETKİLEŞİM DENGESİ</div>
-                                <div class="canvas-mini-wrap">
-                                    <canvas id="interactionMixChart"></canvas>
-                                </div>
-                                <div class="val-sub" id="stat-like-ratio">%0 Beğeni</div>
-                            </div>
-                            
-                            <!-- Success Rate -->
-                            <div class="dash-card-mini">
-                                <div class="lbl">BAŞARI ORANI</div>
-                                <div class="canvas-mini-wrap">
-                                    <canvas id="completionGaugeChart"></canvas>
-                                </div>
-                                <div class="val-sub" id="stat-completion">%0 Tamamlama</div>
-                            </div>
-
-                            <!-- Duration Info -->
-                            <div class="dash-card-mini">
-                                <div class="lbl">ORT. GÖRÜŞME</div>
-                                <div class="huge-val" id="stat-talk-time">0s</div>
-                                <div class="trend-indicator up" id="stat-trend-indicator"><i class="fa-solid fa-caret-up"></i> %12 Artış</div>
-                            </div>
-
-                            <!-- Report Info -->
-                            <div class="dash-card-mini">
-                                <div class="lbl">RAPORLANMA</div>
-                                <div class="huge-val" id="stat-report-rate" style="color:var(--red);">%0.0</div>
-                                <div class="status-chip safe" id="stat-status-chip">GÜVENLİ</div>
-                            </div>
-                        </div>
-
-                        <!-- BOTTOM: Trust Score Meter -->
-                        <div class="dash-card trust-meter">
-                            <div class="dash-card-header">
-                                <i class="fa-solid fa-shield-halved"></i> <span>OZDER GÜVEN SKORU</span>
-                            </div>
-                            <div class="trust-display">
-                                <div class="trust-percentage" id="trust-score">%100</div>
-                                <div class="trust-bar-wrap">
-                                    <div class="trust-bar-fill" id="trust-bar-fill"></div>
+                    <!-- TAB: DENGE (Premium Dashboard v3) -->
+                    <div id="p-content-stats" class="profile-tab-content hidden">
+                        <div class="stats-premium-dashboard">
+                            <!-- Section: Trust Score Gauge -->
+                            <div class="dash-row">
+                                <div class="premium-dash-card trust-gauge-card">
+                                    <div class="card-tag">GÜVEN ANALİZİ</div>
+                                    <div class="gauge-main">
+                                        <div class="gauge-value" id="trust-score">100%</div>
+                                        <div class="gauge-label" id="stat-status-chip">GÜVENLİ</div>
+                                        <div class="trust-bar-bg">
+                                            <div class="trust-bar-neon" id="trust-bar-fill"></div>
+                                        </div>
+                                    </div>
+                                    <div class="card-footer-info">Topluluk rasyosu bazlı otomatik hesaplama</div>
                                 </div>
                             </div>
-                            <p style="font-size:0.5rem; color:#888; margin-top:10px; text-transform:uppercase; letter-spacing:1px;">
-                                TOPLULUK KURALLARINA UYUM VE POZİTİF ETKİLEŞİM BAZLI HESAPLANIR
-                            </p>
+
+                            <!-- Section: Detailed Metrics Grid -->
+                            <div class="detailed-metrics-grid">
+                                <!-- Like Analysis -->
+                                <div class="metric-card-v3 neon-gold">
+                                    <div class="mlbl">POZİTİF ETKİLEŞİM</div>
+                                    <div class="mval" id="stat-like-count">0</div>
+                                    <div class="mpct" id="stat-like-ratio">%0 Beğeni</div>
+                                    <div class="mbar"><div class="mbar-fill" id="stat-like-bar"></div></div>
+                                </div>
+
+                                <!-- Dislike Analysis -->
+                                <div class="metric-card-v3 neon-grey">
+                                    <div class="mlbl">NEGATİF ETKİLEŞİM</div>
+                                    <div class="mval" id="stat-dislike-count">0</div>
+                                    <div class="mpct" id="stat-dislike-ratio">%0 Beğenmeme</div>
+                                    <div class="mbar"><div class="mbar-fill" id="stat-dislike-bar" style="background:#555"></div></div>
+                                </div>
+
+                                <!-- Completion Analysis -->
+                                <div class="metric-card-v3 neon-green">
+                                    <div class="mlbl">GÖRÜŞME TAMAMLAMA</div>
+                                    <div class="mval" id="stat-completion-val">%0</div>
+                                    <div class="mpct" id="stat-completion-lbl">BAŞARI ORANI</div>
+                                    <div class="mbar"><div class="mbar-fill" id="stat-completion-bar" style="background:#00b894"></div></div>
+                                </div>
+
+                                <!-- Duration Analysis -->
+                                <div class="metric-card-v3 neon-blue">
+                                    <div class="mlbl">ORT. GÖRÜŞME SÜRESİ</div>
+                                    <div class="huge-val-text" id="stat-talk-time">0s</div>
+                                    <div class="mpct">SANİYE BAŞINA</div>
+                                    <div class="mbar"><div class="mbar-fill" style="width:100%; opacity:0.3; background:#00d2ff"></div></div>
+                                </div>
+
+                                <!-- Report Analysis -->
+                                <div class="metric-card-v3 neon-red">
+                                    <div class="mlbl">RAPORLANMA ORANI</div>
+                                    <div class="mval" id="stat-report-rate">%0.0</div>
+                                    <div class="mpct" style="color:var(--red);">KRİTİK EŞİK: %30</div>
+                                    <div class="mbar"><div class="mbar-fill" id="stat-report-bar" style="background:var(--red)"></div></div>
+                                </div>
+                            </div>
+
+                            <!-- Technical Charts Row -->
+                            <div class="tech-charts-row">
+                                <div class="tech-card">
+                                    <div class="tech-card-header">AKTİVİTE TRENDİ</div>
+                                    <div class="canvas-box"><canvas id="activityTrendChart"></canvas></div>
+                                </div>
+                                <div class="tech-card">
+                                    <div class="tech-card-header">ETKİLEŞİM KARM_</div>
+                                    <div class="canvas-box"><canvas id="interactionMixChart"></canvas></div>
+                                </div>
+                                <div class="tech-card">
+                                    <div class="tech-card-header">HAFTALIK TAMAMLAMA</div>
+                                    <div class="canvas-box"><canvas id="completionGaugeChart"></canvas></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
