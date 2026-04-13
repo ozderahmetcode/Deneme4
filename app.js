@@ -1791,15 +1791,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentUser.dailyQuests.forEach(q => {
                 const pct = Math.min(100, (q.current / q.goal) * 100);
+                const isCompleted = q.completed || pct >= 100;
+                
                 container.innerHTML += `
-                    <div class="premium-quest-item ${q.completed ? 'completed' : ''}">
+                    <div class="premium-quest-item ${isCompleted ? 'completed' : ''}">
                         <div class="q-lhs">
                             <h4>${q.text}</h4>
-                            <p>${q.completed ? '✓ Tamamlandı' : 'Aksiyon Bekleniyor...'}</p>
+                            <div class="mbar" style="margin-top:8px; height:4px; background:rgba(255,255,255,0.05);">
+                                <div class="mbar-fill" style="width:${pct}%; background:${isCompleted ? '#00b894' : 'var(--gold)'}; box-shadow:0 0 10px ${isCompleted ? '#00b894' : 'var(--gold)'}"></div>
+                            </div>
+                            <p style="margin-top:6px; opacity:0.6;">${isCompleted ? '✓ Görev Tamamlandı' : 'Aksiyon Bekleniyor...'}</p>
                         </div>
                         <div class="q-rhs">
-                            <div class="q-reward">+${q.reward} <i class="fa-solid fa-coins" style="color:var(--gold)"></i></div>
-                            <div class="q-progress">${q.current}/${q.goal}</div>
+                            <div class="q-reward" style="color:${isCompleted ? '#00b894' : 'var(--gold)'}">+${q.reward} <i class="fa-solid fa-coins"></i></div>
+                            <div class="q-progress" style="opacity:0.5;">${q.current}/${q.goal}</div>
                         </div>
                     </div>
                 `;
@@ -1864,59 +1869,103 @@ document.addEventListener('DOMContentLoaded', () => {
                 else { statusChip.innerText = "GÜVENLİ"; statusChip.style.color = "#00b894"; }
             }
 
-            // --- CHARTS ---
+            // --- CHARTS (V3 Premium) ---
             try {
                 const trendCtx = document.getElementById('activityTrendChart');
                 if (trendCtx) {
+                    const ctx = trendCtx.getContext('2d');
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 120);
+                    gradient.addColorStop(0, 'rgba(186,148,91,0.5)');
+                    gradient.addColorStop(1, 'rgba(186,148,91,0)');
+
                     if (trendChart) trendChart.destroy();
                     trendChart = new Chart(trendCtx, {
                         type: 'line',
                         data: {
-                            labels: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+                            labels: ['10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'],
                             datasets: [{
-                                label: 'Görüşme',
-                                data: [15, 25, 20, 35, 30, 45, 40],
-                                borderColor: '#BA945B', backgroundColor: 'rgba(186,148,91,0.1)',
-                                fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0
+                                label: 'Trafik',
+                                data: [35, 55, 45, 80, 65, 95, 85],
+                                borderColor: '#BA945B',
+                                backgroundColor: gradient,
+                                fill: true,
+                                tension: 0.5,
+                                borderWidth: 3,
+                                pointRadius: 0
                             }]
                         },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-                                   scales: { x: { grid: { display:false }, ticks:{ color:'#555', font:{size:8} } }, y:{ display:false } } }
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { display: false }, ticks: { color: '#555', font: { size: 8 } } },
+                                y: { display: false, min: 0 }
+                            }
+                        }
                     });
                 }
+
                 const mixCtx = document.getElementById('interactionMixChart');
                 if (mixCtx) {
                     if (mixChart) mixChart.destroy();
                     mixChart = new Chart(mixCtx, {
                         type: 'doughnut',
                         data: {
-                            labels: ['Pozitif', 'Negatif', 'Ciddi'],
+                            labels: ['+', '-', '!'],
                             datasets: [{
-                                data: [likes||1, dislikes||0, reports||0],
+                                data: [likes || 5, dislikes || 2, reports || 1],
                                 backgroundColor: ['#BA945B', '#444', '#ff4757'],
-                                borderWidth: 0, cutout: '80%'
+                                borderWidth: 0,
+                                cutout: '75%',
+                                borderRadius: 10
                             }]
                         },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } }
+                        }
                     });
                 }
+
                 const gaugeCtx = document.getElementById('completionGaugeChart');
                 if (gaugeCtx) {
+                    const ctx = gaugeCtx.getContext('2d');
+                    const blueGrad = ctx.createLinearGradient(0, 0, 0, 120);
+                    blueGrad.addColorStop(0, 'rgba(0, 210, 255, 0.4)');
+                    blueGrad.addColorStop(1, 'rgba(0, 210, 255, 0)');
+
                     if (gaugeChart) gaugeChart.destroy();
                     gaugeChart = new Chart(gaugeCtx, {
                         type: 'line',
                         data: {
-                            labels: ['1', '2', '3', '4', '5'],
+                            labels: ['P', 'S', 'Ç', 'P', 'C'],
                             datasets: [{
-                                data: [80, 85, 90, 88, 92],
-                                borderColor: '#00b894', borderWidth: 2, pointRadius: 0, tension: 0.5
+                                data: [70, 95, 80, 85, 100],
+                                borderColor: '#00d2ff',
+                                backgroundColor: blueGrad,
+                                fill: true,
+                                tension: 0.4,
+                                borderWidth: 3,
+                                pointRadius: 2,
+                                pointBackgroundColor: '#fff'
                             }]
                         },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-                                   scales: { x:{display:false}, y:{display:false} } }
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#444', font: { size: 8 } } },
+                                y: { display: false }
+                            }
+                        }
                     });
                 }
-            } catch (e) { console.error("Chart Error:", e); }
+            } catch (e) {
+                console.error("Dashboard Chart Error:", e);
+            }
         }
 
         window.togglePCallMute = function (btn) {
