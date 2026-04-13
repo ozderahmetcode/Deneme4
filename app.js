@@ -348,11 +348,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const srvUrl = (window.location.protocol === 'file:') ? 'http://localhost:3000' : window.location.origin;
         globalSocket = io(srvUrl, { transports: ['websocket', 'polling'], reconnection: true });
 
-        // Initialize Room Voice Client Placeholder
-        roomClient = null;
+        // Initialize WebRTC Clients (Global & Ready to listen)
+        webrtcClient = new AudioChatClient(globalSocket, document.getElementById('remote-audio'), () => {
+            showOverlay(document.getElementById('rating-screen'));
+            stopGlobalTimer();
+        });
 
-
-
+        roomClient = new RoomAudioClient(globalSocket, document.getElementById('audio-container'), {
+            onParticipants: (users) => {
+                window.activeRoomParticipants = users;
+                updateParticipantsUI();
+            },
+            onUserJoined: (user) => {
+                // webrtc_client.js handle's the signal, we just update UI
+                updateParticipantsUI(); 
+            },
+            onUserLeft: (data) => {
+                // webrtc_client.js handle's the removal, we update UI
+                updateParticipantsUI();
+            }
+        });
         // Mesaj Alma (Soket üzerinden)
         globalSocket.on('receive_message', (data) => {
             const container = document.getElementById('chat-messages-container');
@@ -619,14 +634,23 @@ document.addEventListener('DOMContentLoaded', () => {
             location.reload();
         });
 
-        function enterInCall(data) {
+        async function enterInCall(data) {
+            console.log("🚀 Görüşmeye giriliyor...", data.role);
             showOverlay(document.getElementById('incall-screen'));
             currentCallStart = Date.now();
-
+            
+            // Kritik: Mikrofonu her iki taraf için de uyandır
             if (webrtcClient) {
+                const micOk = await webrtcClient.requestMicrophone();
+                if (!micOk) {
+                    console.error("❌ Mikrofon alınamadı, görüşme sessiz geçebilir.");
+                }
+
                 if (data.role === 'caller') {
+                    console.log("📞 Arayan rolü: startCall başlatılıyor.");
                     webrtcClient.startCall(data.opponentId);
                 } else {
+                    console.log("👂 Aranan rolü: Teklif (Offer) bekleniyor.");
                     webrtcClient.targetId = data.opponentId;
                 }
             }
@@ -661,29 +685,24 @@ document.addEventListener('DOMContentLoaded', () => {
             stopGlobalTimer();
         });
 
-        document.getElementById('call-accept-btn')?.addEventListener('click', () => {
+        document.getElementById('call-accept-btn')?.addEventListener('click', async () => {
             // "Onayla" butonu - Bağı kurar, süreyi dondurabilir veya arkadaşlık isteği atabilir
             const btn = document.getElementById('call-accept-btn');
             btn.style.color = 'var(--green)';
             btn.innerHTML = '<i class="fa-solid fa-heart"></i>';
             alert("Bağlantı Onaylandı! Harika gidiyorsun.");
-            // Burada sunucuya 'onay' bilgisi gidip süre durdurulabilir orjinal BlindID gibi
+            // webrtcClient zaten globalde tanımlı ve hazır.
+            const ok = await webrtcClient.requestMicrophone();
         });
 
 
     document.getElementById('start-call-btn')?.addEventListener('click', async () => {
         try {
-            // Blueprint: Mikrofon iznini Arama butonuna basınca iste
-            if (typeof AudioChatClient !== "undefined" && globalSocket) {
-                // peer_disconnected geldiğinde UI'yı güncellemesi için callback verdik:
-                webrtcClient = new AudioChatClient(globalSocket, document.getElementById('remote-audio'), () => {
-                    showOverlay(document.getElementById('rating-screen'));
-                    stopGlobalTimer();
-                });
+            if (webrtcClient) {
                 const micAccess = await webrtcClient.requestMicrophone();
                 if (!micAccess) return;
             } else {
-                alert("Hata: Script yüklenemedi veya internet bağlantısı yok.");
+                alert("Hata: Ses sistemi hazır değil. Sayfayı yenileyin.");
                 return;
             }
 
