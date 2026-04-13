@@ -347,6 +347,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let matchingInterval, activeTimerInterval, globalTimeLeft = 0, currentCallStart = 0;
     let localConfirmed = false, remoteConfirmed = false;
     let opponentName = "Anonim";
+
+    function checkMutualConfirmation() {
+        if (localConfirmed && remoteConfirmed) {
+            console.log("✅ Karşılıklı onay sağlandı! Sayaç başlıyor.");
+            startGlobalTimer(120, 'active-countdown');
+        }
+    }
     let webrtcClient = null;
     let roomClient = null; // Mesh Room Audio
     let lastMatchData = null;
@@ -434,6 +441,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (micIcon) {
                 micIcon.style.color = data.isMuted ? 'var(--red)' : 'var(--green)';
                 micIcon.className = data.isMuted ? 'fa-solid fa-microphone-slash' : 'fa-solid fa-microphone';
+            }
+
+            // EĞER KARŞI TARAF MİKROFONU AÇTIYSA (Heart'a bastıysa) ONAYLANMIŞ SAY
+            if (!data.isMuted) {
+                remoteConfirmed = true;
+                checkMutualConfirmation();
             }
         });
 
@@ -818,12 +831,6 @@ document.addEventListener('DOMContentLoaded', () => {
             checkMutualConfirmation();
         });
 
-        function checkMutualConfirmation() {
-            if (localConfirmed && remoteConfirmed) {
-                console.log("✅ Karşılıklı onay sağlandı! Sayaç başlıyor.");
-                startGlobalTimer(120, 'active-countdown');
-            }
-        }
 
 
         document.getElementById('start-call-btn')?.addEventListener('click', async () => {
@@ -1964,58 +1971,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // --- RATING SCREEN FUNCTIONS ---
-
-        window.rateLike = function() {
-            stats.callsDone++;
-            saveStats();
-            showTab('home-screen');
-        }
-
-        window.rateDislike = function() {
-            stats.callsDone++;
-            saveStats();
-            showTab('home-screen');
-        }
-
-        window.addFriendInCall = function() {
-            if (!lastMatchData || !webrtcClient || !webrtcClient.targetId) return;
-            const oppName = lastMatchData.oppUsername || 'Gizli';
-            const oppAvatar = lastMatchData.oppAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${oppName}`;
-            
-            const isAlreadyFriend = currentUser.friends.some(f => f.username === oppName);
-            if (isAlreadyFriend) {
-                alert("Bu kişi zaten arkadaş listenizde.");
-                return;
-            }
-
-            globalSocket.emit('friend_request', { 
-                targetId: webrtcClient.targetId, 
-                senderName: currentUser.username,
-                senderAvatar: currentUser.avatarUrl
-            });
-            alert("Arkadaşlık isteği gönderildi! Karşı tarafın onaylaması bekleniyor.");
-        }
-
-        window.reconnectCallVip = function() {
-            if (!lastMatchData) {
-                alert("Yeniden bağlanacak kimse bulunamadı.");
-                return;
-            }
-            alert("VIP: " + (lastMatchData.oppUsername || 'Kullanıcı') + " ile tekrar bağlantı kuruluyor...");
-            hideOverlays();
-            enterInCall(lastMatchData);
-        }
-
-        window.skipRating = function() {
-            showTab('home-screen');
-        }
-
-        window.submitReport = function() {
-            alert("Raporun incelenmek üzere ekibe iletildi.");
-            document.getElementById('report-modal').classList.add('hidden');
-            hideOverlays();
-        }
 
         // --- DAILY QUESTS SYSTEM (Restored & Enhanced) ---
         const questTemplates = [
@@ -2337,6 +2292,32 @@ document.addEventListener('DOMContentLoaded', () => {
             input.value = '';
         }
     } // end window.io
+
+    // --- GLOBAL RATING ACTIONS (TOTAL FIX) ---
+    window.rateLike = function() {
+        console.log("👍 Beğenildi...");
+        stats.likes++;
+        saveStats();
+        showTab('home-screen');
+    };
+    window.rateDislike = function() {
+        console.log("👎 Beğenilmedi...");
+        stats.skips++;
+        saveStats();
+        showTab('home-screen');
+    };
+    window.skipRating = function() {
+        showTab('home-screen');
+    };
+    window.addFriendInCall = function() {
+        if (!lastMatchData || !webrtcClient || !webrtcClient.targetId) return;
+        globalSocket.emit('friend_request', { 
+            targetId: webrtcClient.targetId, 
+            senderName: currentUser.username,
+            senderAvatar: currentUser.avatarUrl
+        });
+        alert("Arkadaşlık isteği gönderildi!");
+    };
 
     initApp();
     initPTTListeners();
