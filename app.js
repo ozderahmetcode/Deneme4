@@ -24,12 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let usersDB = JSON.parse(localStorage.getItem('blindIdUsers')) || {};
     let currentUser = JSON.parse(localStorage.getItem('blindIdSession')) || null;
     let liteMode = JSON.parse(localStorage.getItem('blindIdLiteMode')) || false;
-    let stats = JSON.parse(localStorage.getItem('blindIdStats')) || { totalCalls: 0, likes: 0, dislikes: 0, reports: 0, skips: 0, talkTimeSeconds: 0 };
     let statsChart = null;
-
-    function saveStats() {
-        localStorage.setItem('blindIdStats', JSON.stringify(stats));
-    }
 
     // Girişte izni sadece mikrofon için istiyoruz (Blind ID standardı)
     function requestPermissions() {
@@ -904,53 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
             { id: 'q6', text: "1 Dakika Konuş", reward: 60 }
         ];
 
-        window.initDailyQuests = function () {
-            const today = new Date().toDateString();
-            let savedQuests = JSON.parse(localStorage.getItem('ozder_quests') || '{}');
-
-            if (savedQuests.date !== today) {
-                // New day, new quests
-                const scattered = questPool.sort(() => 0.5 - Math.random()).slice(0, 3);
-                savedQuests = {
-                    date: today,
-                    items: scattered.map(q => ({ ...q, completed: false, claimed: false }))
-                };
-                localStorage.setItem('ozder_quests', JSON.stringify(savedQuests));
-            }
-            renderQuests(savedQuests.items);
-        }
-
-        function renderQuests(items) {
-            const container = document.getElementById('quest-list');
-            if (!container) return;
-            container.innerHTML = '';
-            items.forEach((q, idx) => {
-                const div = document.createElement('div');
-                div.className = 'quest-item';
-                div.innerHTML = `
-                <span>${q.text} (${q.completed ? '1/1' : '0/1'})</span>
-                <button class="cheat-btn ${q.claimed ? 'bg-grey' : 'bg-green'}" 
-                        ${!q.completed || q.claimed ? 'disabled' : ''} 
-                        onclick="claimQuest(${idx})">
-                    ${q.claimed ? 'Alındı' : (q.completed ? `Al (+${q.reward} \uD83E\uDE99)` : 'Kilitli')}
-                </button>
-            `;
-                container.appendChild(div);
-            });
-        }
-
-        window.claimQuest = function (idx) {
-            let savedQuests = JSON.parse(localStorage.getItem('ozder_quests'));
-            const q = savedQuests.items[idx];
-            if (q.completed && !q.claimed) {
-                q.claimed = true;
-                currentUser.gold += q.reward;
-                saveUser();
-                localStorage.setItem('ozder_quests', JSON.stringify(savedQuests));
-                renderQuests(savedQuests.items);
-                alert(`Tebrikler! ${q.reward} Altın kazandınız! 💰`);
-            }
-        }
+        // Eski görev sistemi kaldırıldı (Yeni sistem aşağıda mevcut)
 
         window.changeUsername = function () {
             if (currentUser.hasRenamed && currentUser.gold < 100) { alert('İsim değiştirmek için 100 Altın gerekiyor!'); return; }
