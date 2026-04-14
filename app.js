@@ -1642,6 +1642,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         window.leaveRoom = function () {
+            // Sunucuya odayi terk ettigimizi soyle
+            if (window.activeRoomId) {
+                globalSocket.emit('leave_room', { roomId: window.activeRoomId });
+                console.log(`🚪 [Oda] Terk edildi: ${window.activeRoomId}`);
+                window.activeRoomId = null;
+            }
+
             if (roomClient) roomClient.leave();
             roomClient = null;
             // Radyo / Müzik durdur

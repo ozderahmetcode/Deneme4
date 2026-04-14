@@ -235,14 +235,14 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // --- Zirhli Oda Kontrolü (Duplicates & Ghosts) ---
+        // Yeni bir odaya girmeden once diger butun odalardan temizle
+        clearUserFromAllRooms(decodedUser.id, socket);
+        
         if (rooms[roomId].length >= def.cap) {
             socket.emit('room_full');
             return;
         }
-
-        // --- Zirhli Oda Kontrolü (Duplicates) ---
-        // Eger kullanici (userId) zaten odadaysa eski girisini temizliyoruz
-        rooms[roomId] = rooms[roomId].filter(u => u.userId !== decodedUser.id);
         
         const user = { 
             id: socket.id, 
@@ -305,10 +305,27 @@ io.on('connection', (socket) => {
         io.to(data.targetId).emit('private_call_finished', { senderId: socket.id });
     });
 
+    // --- Nuclear Room Cleanup (Ghost Buster) ---
+    // Kullaniciyi butun odalardan tertemiz silen yardimci fonksiyon
+    function clearUserFromAllRooms(userId, sock) {
+        let changed = false;
+        for (const rId in rooms) {
+            const initialCount = rooms[rId].length;
+            rooms[rId] = rooms[rId].filter(u => u.userId !== userId);
+            if (rooms[rId].length !== initialCount) {
+                changed = true;
+                if (sock) sock.to(rId).emit('room_user_left', { userId: userId });
+            }
+        }
+        if (changed) broadcastRoomsInfo();
+    }
+
     function leaveRoom(sock, roomId) {
         if (rooms[roomId]) {
-            rooms[roomId] = rooms[roomId].filter(u => u.id !== sock.id);
-            sock.to(roomId).emit('room_user_left', { id: sock.id });
+            const decodedUser = sock.decoded;
+            // Artik socket.id degil, kalici userId uzerinden temizlik yapiyoruz
+            rooms[roomId] = rooms[roomId].filter(u => u.userId !== decodedUser.id);
+            sock.to(roomId).emit('room_user_left', { id: sock.id, userId: decodedUser.id });
             sock.leave(roomId);
             broadcastRoomsInfo();
         }
@@ -348,10 +365,19 @@ io.on('connection', (socket) => {
     socket.on('get_rooms_info', () => { broadcastRoomsInfo(); broadcastGamesInfo(); });
 
     socket.on('disconnect', () => {
-        console.log('🔴 Çıktı:', socket.id);
+        const decodedUser = socket.decoded;
+        if (decodedUser) {
+            // Sunucudan kopunca butun odalardan tertemiz siliniyoruz
+            clearUserFromAllRooms(decodedUser.id, socket);
+            console.log(`❌ [Zırhlı] Koptu: ${decodedUser.username} (${socket.id})`);
+        } else {
+            console.log('❌ [Zırhlı] Koptu (Bilinmeyen):', socket.id);
+        }
+
+        // Matchmaking ve Havuz Temizliği
         waitingPool = waitingPool.filter(w => w.socketId !== socket.id);
+        MatchmakerService.handleDisconnect(socket.id);
         for (const id in gameWaitingPools) { if (gameWaitingPools[id] === socket.id) gameWaitingPools[id] = null; }
-        for (const r in rooms) { if (rooms[r].some(u => u.id === socket.id)) leaveRoom(socket, r); }
     });
 });
 
