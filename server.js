@@ -221,13 +221,16 @@ io.on('connection', (socket) => {
     socket.on('end_call', (p) => io.to(p.targetId).emit('peer_disconnected', { msg: 'Disconnected' }));
 
     // --- ROOMS ---
-    socket.on('join_room', (data) => {
-        const { roomId, username, avatarUrl, gold } = data;
+    socket.on('join_room', async (data) => {
+        const { roomId, username, avatarUrl } = data;
+        const decodedUser = socket.decoded; // JWT ile dogrulanmis kimlik
         const def = roomDefs[roomId];
         if (!def) return;
 
-        // VIP check
-        if (def.vip && (!gold || gold < 500)) {
+        // VIP check (Sunucu tarafli dogrulama)
+        // User'in gercek altinini Token'dan veya DB'den aliyoruz (data'dan degil!)
+        const userGold = decodedUser.gold || 1000; 
+        if (def.vip && userGold < 500) {
             socket.emit('room_vip_required');
             return;
         }
@@ -237,7 +240,17 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const user = { id: socket.id, username, avatarUrl };
+        // --- Zirhli Oda Kontrolü (Duplicates) ---
+        // Eger kullanici (userId) zaten odadaysa eski girisini temizliyoruz
+        rooms[roomId] = rooms[roomId].filter(u => u.userId !== decodedUser.id);
+        
+        const user = { 
+            id: socket.id, 
+            userId: decodedUser.id, 
+            username: decodedUser.username, 
+            avatarUrl: decodedUser.avatarUrl || avatarUrl 
+        };
+        
         rooms[roomId].push(user);
         socket.join(roomId);
         
