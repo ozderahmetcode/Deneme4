@@ -16,13 +16,13 @@
   "type": "commonjs",
   "dependencies": {
     "dotenv": "^16.4.5",
-    "express": "^5.2.1",
+    "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "socket.io": "^4.8.3"
   },
   "overrides": {
-    "body-parser": "2.2.2",
+    "body-parser": "1.20.3",
     "qs": "6.15.1",
     "path-to-regexp": "8.4.2",
     "socket.io-parser": "4.2.6",

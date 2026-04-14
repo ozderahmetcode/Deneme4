@@ -50,7 +50,7 @@ async function initDB() {
         // ... (rest of the SQL queries remain same but inside this safety check)
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                id VARCHAR(255) PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
                 age INT NOT NULL CHECK (age >= 18),
                 gold_balance INT DEFAULT 100 CHECK (gold_balance >= 0),

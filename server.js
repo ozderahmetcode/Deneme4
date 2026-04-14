@@ -5,6 +5,10 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const MatchmakerService = require('./matchmaker_service_');
+const { initDB } = require('./database');
+
+// Veritabanını ayağa kaldır (Zırhlı Başlangıç)
+initDB().catch(err => console.error("❌ Kritik DB Hatası:", err));
 
 const app = express();
 const server = http.createServer(app);
