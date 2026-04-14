@@ -145,17 +145,14 @@
 
                 <div class="filters-container" id="match-filters">
                     <div class="filter-btns-row">
-                        <div class="filter-btn active" id="filter-opposite" onclick="setMatchPref('opposite')"><i
-                                class="fa-solid fa-venus-mars"></i></div>
-                        <div class="filter-btn" id="filter-mixed" onclick="setMatchPref('mixed')"><i
-                                class="fa-solid fa-shuffle"></i></div>
-                        <div class="filter-btn advanced-btn" id="filter-advanced" onclick="openAdvancedFilters()"><i
-                                class="fa-solid fa-sliders"></i></div>
+                        <div class="filter-btn active" id="filter-opposite" onclick="setMatchPref('opposite')"><i class="fa-solid fa-venus-mars"></i></div>
+                        <div class="filter-btn" id="filter-mixed" onclick="setMatchPref('mixed')"><i class="fa-solid fa-shuffle"></i></div>
+                        <div class="filter-btn advanced-btn" id="filter-advanced" onclick="openAdvancedFilters()"><i class="fa-solid fa-sliders"></i></div>
                     </div>
                     <div class="filter-labels-row">
-                        <span>Karşı Cins</span>
-                        <span>Karışık</span>
-                        <span>Gelişmiş</span>
+                        <span>KARŞI CİNS</span>
+                        <span>KARIŞIK</span>
+                        <span>GELİŞMİŞ</span>
                     </div>
                 </div>
 
@@ -1195,41 +1192,72 @@
     <div id="incall-screen" class="screen overlay-screen hidden"
         style="background: #0f172a; flex-direction: column; z-index: 200;">
         <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px;">
-            <div style="position:relative;">
-                <img id="incall-avatar" src="" style="width:150px; height:150px; border-radius:50%; border:3px solid var(--gold); margin-bottom:20px; animation: pulse 2s infinite;">
-                <i id="opp-mic-status" class="fa-solid fa-microphone" style="position:absolute; bottom:25px; right:10px; color:var(--green); background:#0f172a; padding:8px; border-radius:50%; font-size:0.8rem; border:2px solid var(--gold);"></i>
+        <div class="incall-user-card">
+            <div class="incall-avatar-wrap">
+                <img id="remote-avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=EliteUser" alt="User">
             </div>
-            <h2 id="incall-username-text" style="color:white; font-size:1.4rem; font-family: 'Montserrat', sans-serif;">Görüşülüyor...</h2>
-            <div id="active-countdown" style="color:var(--gold); font-size:3.5rem; font-weight:900; margin-top:10px; font-family: 'Playfair Display', serif;">120</div>
-            
-            <div id="ice-breaker-box" class="hidden" style="margin-top:20px; background:rgba(186,148,91,0.1); padding:15px; border-radius:15px; border:1px solid var(--gold); max-width:80%; text-align:center;">
-                <i class="fa-solid fa-lightbulb" style="color:var(--gold); margin-bottom:8px;"></i>
-                <p id="ice-breaker-text" style="color:white; font-size:0.9rem; font-style:italic; margin:0;"></p>
-            </div>
+            <h2 id="remote-username" style="color:white; font-weight: 800; margin-top: 10px;">Elite_592</h2>
+            <div class="incall-tag" id="remote-region">Marmara</div>
+            <div class="incall-timer" id="call-timer">00:00</div>
         </div>
 
-        <div style="padding:40px; background:rgba(30,41,59,0.5); display:flex; justify-content:center; gap:40px; border-top:1px solid rgba(255,255,255,0.05);">
-            <button class="circle-btn" onclick="toggleMuteUI(this)" style="background:rgba(255,255,255,0.1); color:var(--gold); border:1px solid rgba(186,148,91,0.2);"><i class="fa-solid fa-microphone"></i></button>
-            <button id="hangup-btn" class="circle-btn btn-reject" style="width:80px; height:80px; font-size:2rem; background:#ef4444;"><i class="fa-solid fa-phone-slash"></i></button>
-            <button id="call-accept-btn" class="circle-btn" style="background:rgba(255,255,255,0.1); color:var(--red); border:1px solid rgba(239, 68, 68, 0.2);"><i class="fa-solid fa-heart"></i></button>
+        <div class="incall-controls">
+            <button class="incall-btn btn-mute" onclick="toggleMuteUI(this)"><i class="fa-solid fa-microphone"></i></button>
+            <button id="hangup-btn" class="incall-btn btn-hangup" onclick="endCall()"><i class="fa-solid fa-phone-slash"></i></button>
+            <button id="call-heart-btn" class="incall-btn btn-heart" onclick="sendHeart()"><i class="fa-solid fa-heart"></i></button>
         </div>
     </div>
 
     <!-- RATING SCREEN (NEW RECOVERED) -->
-    <div id="rating-screen" class="screen overlay-screen hidden"
-        style="background: #0f172a; flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 300;">
-        <i class="fa-solid fa-circle-check" style="font-size:5rem; color:var(--green); margin-bottom:20px;"></i>
-        <h2 style="color:white; font-family: 'Playfair Display', serif;">Görüşme Tamamlandı!</h2>
-        <p style="color:#aaa;">Görüşme nasıldı? Değerlendir ve XP kazan.</p>
-
-        <div style="display:flex; gap:30px; margin:40px 0;">
-            <button class="rate-large thumbs-up" onclick="rateLike()"><i class="fa-solid fa-thumbs-up"></i></button>
-            <button class="rate-large thumbs-down" onclick="rateDislike()"><i class="fa-solid fa-thumbs-down"></i></button>
+    <!-- RATING SCREEN (PREMIUM OVERHAULED) -->
+    <div id="rating-screen" class="screen overlay-screen hidden">
+        <h2 class="rating-title" style="color: #BA945B; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 1.4rem; margin-bottom: 30px;">Görüşmeyi Değerlendir</h2>
+        
+        <!-- MINI STATS ROW -->
+        <div class="rating-mini-stats" style="display: flex; gap: 40px; margin-bottom: 40px;">
+            <div style="text-align: center;">
+                <i class="fa-solid fa-thumbs-up" style="color: #ffcc00; font-size: 1.5rem; display: block; margin-bottom: 5px;"></i>
+                <div id="rating-like-pct" style="font-weight: 800; color: #00b894; font-size: 0.9rem;">%0</div>
+                <div style="font-size: 0.6rem; color: #888; font-weight: 700; text-transform: uppercase;">Beğeni</div>
+            </div>
+            <div style="text-align: center;">
+                <i class="fa-solid fa-thumbs-down" style="color: #ffcc00; font-size: 1.5rem; display: block; margin-bottom: 5px;"></i>
+                <div id="rating-dislike-pct" style="font-weight: 800; color: var(--red); font-size: 0.9rem;">%0</div>
+                <div style="font-size: 0.6rem; color: #888; font-weight: 700; text-transform: uppercase;">Beğenmeme</div>
+            </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:12px; width:80%;">
-            <button id="call-again-btn" class="btn-gold" style="width:100%;">HEMEN TEKRAR ARA</button>
-            <button id="skip-rating-btn" class="btn-secondary" style="background:transparent; color:#888; border:none;" onclick="hideOverlays()">GEÇ</button>
+        <!-- BIG CIRCLE ACTIONS -->
+        <div class="rating-big-actions" style="display: flex; gap: 40px; margin-bottom: 40px;">
+            <div style="text-align: center; cursor: pointer;" onclick="rateDislike()">
+                <div class="circle-btn-rating" style="background: #ff7675; width: 85px; height: 85px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; box-shadow: 0 5px 15px rgba(255,118,117,0.3);">
+                    <i class="fa-solid fa-thumbs-down" style="color: white; font-size: 2rem;"></i>
+                </div>
+                <div style="color: #ff7675; font-weight: 800; font-size: 0.75rem;">Kötüydü</div>
+            </div>
+            <div style="text-align: center; cursor: pointer;" onclick="rateLike()">
+                <div class="circle-btn-rating" style="background: #00b894; width: 85px; height: 85px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; box-shadow: 0 5px 15px rgba(0,184,148,0.3);">
+                    <i class="fa-solid fa-thumbs-up" style="color: white; font-size: 2rem;"></i>
+                </div>
+                <div style="color: #00b894; font-weight: 800; font-size: 0.75rem;">Harikaydı</div>
+            </div>
+        </div>
+
+        <!-- PRIMARY BUTTONS -->
+        <div style="display: flex; flex-direction: column; gap: 15px; width: 100%; align-items: center;">
+            <button id="add-friend-btn-rating" class="btn-gold" style="width: 80%; padding: 18px; border-radius: 25px; font-weight: 800; font-size: 0.95rem; color: #1a1110;" onclick="addFriendInRating()">
+                <i class="fa-solid fa-user-plus"></i> Arkadaş Ekle
+            </button>
+            
+            <button class="circle-btn" style="background: #2d1e1b; border: 1px solid rgba(255,255,255,0.05); width: 45px; height: 45px; display: flex; align-items: center; justify-content: center;" onclick="reportUserInRating()">
+                <i class="fa-solid fa-flag" style="color: #631010; font-size: 1rem;"></i>
+            </button>
+
+            <button class="btn-gold" style="width: 80%; padding: 15px; border-radius: 15px; background: transparent; border: 1.5px solid #BA945B; color: #BA945B; font-weight: 800; font-size: 0.9rem;" onclick="reconnectVIP()">
+                <i class="fa-solid fa-phone"></i> Tekrar Bağlan (VIP)
+            </button>
+            
+            <button id="skip-rating-btn" style="background:transparent; color:#888; border:none; margin-top:10px; font-weight:800; cursor:pointer;" onclick="hideOverlays()">Geç</button>
         </div>
     </div>
 
@@ -1271,7 +1299,35 @@
     <script src="game_engine.js"></script>
     <script src="app.js"></script>
 
+    <!-- ADVANCED FILTERS MODAL (VIP) -->
+    <div id="advanced-filters-modal" class="modal-overlay hidden">
+        <div class="modal-content premium-card">
+            <div class="modal-header">
+                <h3>Gelişmiş Seçenekler</h3>
+                <button class="close-btn" onclick="closeModal('advanced-filters-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label>Şehir Seçimi</label>
+                <select id="adv-filter-city" class="auth-input">
+                    <option value="ALL">Hepsi (Önerilen)</option>
+                    <option value="İstanbul">İstanbul</option>
+                    <option value="Ankara">Ankara</option>
+                    <option value="İzmir">İzmir</option>
+                </select>
+                <label>Yaş Aralığı</label>
+                <select id="adv-filter-age" class="auth-input">
+                    <option value="ALL">Farketmez</option>
+                    <option value="18-24">18 - 24</option>
+                    <option value="25-34">25 - 34</option>
+                    <option value="35+">35+</option>
+                </select>
+                <button class="btn-gold" onclick="closeModal('advanced-filters-modal')" style="margin-top:20px;">Kaydet</button>
+            </div>
+        </div>
+    </div>
+
     <!-- FRIEND REQUEST MODAL (CENTERED) -->
+
     <div id="friend-request-modal" class="modal-overlay hidden">
         <div class="modal-content premium-card" style="text-align:center;">
             <div class="modal-header">

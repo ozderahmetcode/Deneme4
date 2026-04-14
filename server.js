@@ -149,20 +149,28 @@ io.on('connection', (socket) => {
         }
 
         // 3. Matchmaking Engine (Local Memory Scan - Diagnostic Mode)
-        console.log(`🔍 Eşleşme Aranıyor: ${username} | Bölge: ${myRegion} | VIP: ${isVip} | Tercih: ${pref}`);
+        console.log(`🔍 Eşleşme Aranıyor: ${username} (Socket: ${socket.id}) | Bölge: ${myRegion} | VIP: ${isVip}`);
         
         let matchIdx = -1;
         
+        // ÖNCE: Havuzdaki ölü bağlantıları temizle
+        let activePool = [];
+        for (let entry of waitingPool) {
+            if (io.sockets.sockets.has(entry.socketId)) {
+                activePool.push(entry);
+            } else {
+                console.log(`🧹 Ölü soket temizlendi: ${entry.username}`);
+            }
+        }
+        waitingPool = activePool;
+
+        // PHASE 1: Temel Filtrelerle Ara
         for (let i = 0; i < waitingPool.length; i++) {
             const w = waitingPool[i];
-            
-            // 1. Temel Kontroller
             if (w.socketId === socket.id) continue;
-            // if (data.isTroll !== w.isTroll) continue; // Troll kısıtlamasını şimdilik kaldırdık
 
-            // 2. Cinsiyet & Tercih Uyumlu mu?
+            // Cinsiyet & Tercih Uyumu
             let genderOk = false;
-            
             if (pref === 'mixed' || w.preference === 'mixed') {
                 genderOk = true;
             } else {
@@ -172,20 +180,14 @@ io.on('connection', (socket) => {
             }
 
             if (!genderOk) {
-                console.log(`   - ❌ Cinsiyet/Tercih uyuşmuyor: ${w.username}`);
+                console.log(`   - ❌ Cinsiyet uyuşmuyor: ${w.username}`);
                 continue;
             }
 
-            // 3. Bölge & VIP Filtreleri
+            // Bölge & VIP Filtreleri (Opsiyonel Tercihler)
             let regionOk = (myRegion === w.region);
-            // VIP şehir tercihlerini şimdilik "tercih" seviyesinde tutuyoruz
-            /*
-            if (isVip && targetCity && targetCity !== "ALL" && w.region !== targetCity) regionOk = false;
-            if (w.isVip && w.targetCity && w.targetCity !== "ALL" && myRegion !== w.targetCity) regionOk = false;
-            */
-
             if (!regionOk) {
-                console.log(`   - ⏳ Bölge uyumsuz (Faz 1 skipped): ${w.username}`);
+                console.log(`   - ⏳ Bölge farklı (Faz 1 skipped): ${w.username}`);
                 continue;
             }
 
@@ -193,19 +195,19 @@ io.on('connection', (socket) => {
             break;
         }
 
-        // Phase 2: Kısıtlamaları Kaldır (Catch-All)
+        // PHASE 2: Tüm Kısıtlamaları Kaldır (Catch-All) - Zorunlu Eşleşme
         if (matchIdx < 0) {
-            console.log(`🔄 Faz 2: Kısıtlamalar kaldırılıyor (Catch-All). Havuzdaki kişi sayısı: ${waitingPool.length}`);
+            console.log(`🔄 Faz 2: Filtreler kaldırılıyor. Havuzdaki uygun kişi sayısı: ${waitingPool.length}`);
             for (let i = 0; i < waitingPool.length; i++) {
                 const w = waitingPool[i];
                 if (w.socketId === socket.id) continue;
                 
-                // Faz 2'de bekleyen ilk kişi ile eşleşmeyi zorla
-                console.log(`🎯 Faz 2 eşleşmesi bulundu: ${w.username}`);
+                console.log(`🎯 Zorunlu eşleşme (Faz 2) bulundu: ${w.username}`);
                 matchIdx = i;
                 break;
             }
         }
+
 
 
         if (matchIdx >= 0) {
