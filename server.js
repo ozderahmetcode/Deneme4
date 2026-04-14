@@ -4,11 +4,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const MatchmakerService = require('./matchmaker_service_');
-const { initDB } = require('./database');
-
-// Veritabanını ayağa kaldır (Zırhlı Başlangıç)
-initDB().catch(err => console.error("❌ Kritik DB Hatası:", err));
 
 const app = express();
 const server = http.createServer(app);
@@ -258,9 +253,6 @@ io.on('connection', (socket) => {
         
         rooms[roomId].push(user);
         socket.join(roomId);
-        
-        // --- Zırhlı Onay ---
-        socket.emit('room_join_success', { roomId, username: user.username });
         
         socket.emit('room_participants', rooms[roomId]);
         socket.to(roomId).emit('room_user_joined', user);
