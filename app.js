@@ -635,6 +635,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
 
+        globalSocket.on('room_join_success', (data) => {
+            console.log(`✅ Odaya giris basarili: ${data.roomId}`);
+            showOverlay(document.getElementById('room-inner-screen'));
+        });
+
+        globalSocket.on('room_full', () => {
+            console.warn("⚠️ Oda dolu!");
+            alert("❌ Bu oda şu an tıka basa dolu kanki! Birinin çıkmasını bekle veya başka bir odayı dene.");
+            // Her ihtimale karsi state'i temizle
+            if (window.leaveRoom) window.leaveRoom();
+        });
+
+        globalSocket.on('room_vip_required', () => {
+            console.warn("💎 VIP gerekli!");
+            alert("💎 Burası sadece VIP kulübüne özel kanki! Girmek için en az 500 altına ihtiyacın var.");
+            if (window.leaveRoom) window.leaveRoom();
+        });
+
         roomClient = new RoomAudioClient(globalSocket, document.getElementById('audio-container'), {
             onParticipants: (users) => {
                 window.activeRoomParticipants = users;
@@ -1638,7 +1656,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
             }
 
-            showOverlay(document.getElementById('room-inner-screen'));
+            // showOverlay burada OLMAYMALI (Zırhlı Yapı v2.3)
+            // Sadece sunucudan 'room_join_success' gelirse içeri gireceğiz.
         }
 
         window.leaveRoom = function () {

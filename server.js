@@ -254,6 +254,9 @@ io.on('connection', (socket) => {
         rooms[roomId].push(user);
         socket.join(roomId);
         
+        // --- Zırhlı Onay ---
+        socket.emit('room_join_success', { roomId, username: user.username });
+        
         socket.emit('room_participants', rooms[roomId]);
         socket.to(roomId).emit('room_user_joined', user);
         broadcastRoomsInfo();
