@@ -246,7 +246,7 @@ let stats = (currentUser && currentUser.username) ? (JSON.parse(localStorage.get
 let statsChart = null;
 let authScreen, screensContainer, mainNav;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // ---- DOM & DATA ----
     authScreen = document.getElementById('auth-screen');
     screensContainer = document.getElementById('screens-container');
@@ -559,8 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Sunucu adresi: Deployment'ta (Render/Railway) kendi adresini otomatik alır.
-    (async () => {
-        const token = await ensureAuth();
+    const token = await ensureAuth();
         if (window.io) {
             globalSocket = io(srvUrl, { 
                 transports: ['websocket', 'polling'], 
@@ -574,11 +573,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 stopGlobalTimer();
                 showOverlay(document.getElementById('rating-screen'));
             });
-        }
-    })();
 
-        // Karşılıklı Onay Sinyali
-        globalSocket.on('call_confirmed', (data) => {
+            // Karşılıklı Onay Sinyali
+            globalSocket.on('call_confirmed', (data) => {
             console.log("❤️ Karşı taraf görüşmeyi onayladı!");
             remoteConfirmed = true;
             checkMutualConfirmation();
@@ -2463,8 +2460,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 alert("Bağlantı hatası: Sunucuya bağlanılamadı.");
             }
-
-            input.value = '';
         }
     } // end window.io
 
