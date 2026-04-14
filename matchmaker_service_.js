@@ -9,31 +9,40 @@
  */
 
 const MatchmakingEngine = require('./matchmaking');
+const { UserRepository } = require('./database');
 
 const MatchmakerService = {
     /**
      * Eşleşme arayan kullanıcıyı işleme alır
      */
     async handleFindMatch(socket, data) {
-        console.log(`🔍 [Service] Arama isteği: ${socket.id} (Username: ${data.username})`);
+        // Artik veriler istemciden (data) degil, Token'dan (socket.decoded) geliyor.
+        const user = socket.decoded;
+        console.log(`🔍 [Service] GUVENLI Arama: ${user.username} (ID: ${user.id})`);
 
-        // 1. VIP/Kredi Kontrolü (Mock)
-        // PostgreSQL kaldırıldığı için şimdilik client'dan gelen gold verisine veya 
-        // localState'e güveniyoruz.
-        const userGold = data.gold || 0;
+        // 1. VIP/Kredi Kontrolü (Sunucu Taraflı - Veritabanı Doğrulaması)
+        // Kullanıcının güncel altın miktarını DB'den çekiyoruz
+        let userGold = 0;
+        try {
+            // Mock mode olsa bile UserRepository güvenli veri döner
+            const dbUser = await UserRepository.getUserById(user.id); 
+            userGold = dbUser ? dbUser.gold_balance : 100; // Default 100
+        } catch (e) {
+            userGold = user.gold || 100;
+        }
+        
         const isVIP = userGold >= 500;
 
-        // 2. Havuzuna Ekle
+        // 2. Havuzuna Ekle (Manipülasyona kapalı veri seti)
         const matchResult = MatchmakingEngine.addToQueue({
             socketId: socket.id,
-            userId: data.userId || socket.id,
-            username: data.username || 'Anonim',
-            gender: data.gender,
-            region: data.region,
-            preference: data.preference,
+            userId: user.id,
+            username: user.username,
+            gender: user.gender,
+            region: user.region,
+            preference: data.preference, // Tercih istemci tarafından seçilebilir
             regionFilter: data.regionFilter,
-            age: data.age,
-            zodiac: data.zodiac,
+            age: user.age,
             isVIP: isVIP
         });
 

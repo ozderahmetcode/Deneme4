@@ -12,34 +12,31 @@
  * tüm çöp datalar da otomatik uçar ve hiçbir amelelik bırakmaz.
  */
 
-let Pool;
-let isNativePool = false;
+const { Pool } = require('pg');
 
-try {
-    const pg = require('pg');
-    Pool = pg.Pool;
-    isNativePool = true;
-    console.log("🟢 PostgreSQL kütüphanesi hazır.");
-} catch (err) {
-    console.warn("⚠️ [UYARI] PostgreSQL (pg) kütüphanesi yüklü değil. Veritabanı işlemleri 'Hafıza Modu' (Mock) üzerinden yürüyecek.");
-    // Mock Pool for safety
-    Pool = class {
-        constructor() { this.on = () => {}; }
-        connect() { return { query: async () => ({ rows: [] }), release: () => {} }; }
-        query() { return { rows: [] }; }
-    };
-}
+// Üretim ortamında (Production - Render) DATABASE_URL önceliklidir.
+const isProduction = process.env.NODE_ENV === 'production';
+const connectionConfig = process.env.DATABASE_URL 
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: isProduction ? { rejectUnauthorized: false } : false
+      }
+    : {
+        user: process.env.DB_USER || 'postgres',
+        host: process.env.DB_HOST || 'localhost',
+        database: process.env.DB_NAME || 'blindid_db',
+        password: process.env.DB_PASS || '123456',
+        port: process.env.DB_PORT || 5432,
+      };
 
-// Üretim ortamında (Production) bu değerler .env dosyasından çekilir.
 const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'blindid_db',
-    password: process.env.DB_PASS || '123456',
-    port: process.env.DB_PORT || 5432,
-    max: 50,
+    ...connectionConfig,
+    max: 20, // Render Free Tier limitleri için daha güvenli bir sayı
     idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
 });
+
+let isNativePool = true; // pg paketini yukarıda require ettiğimiz için artık kesin true
 
 async function initDB() {
     if (!isNativePool) {
@@ -91,6 +88,13 @@ const UserRepository = {
         } finally {
             client.release();
         }
+    },
+    async getUserById(userId) {
+        if (!isNativePool) {
+            return { id: userId, username: 'MockUser', gold_balance: 1000 };
+        }
+        const res = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+        return res.rows[0];
     }
 };
 

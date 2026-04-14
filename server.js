@@ -3,12 +3,43 @@ console.log("🟢 Sunucu başlatma hazırlığı yapılıyor...");
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+const JWT_SECRET = process.env.JWT_SECRET || 'ozder_default_secret';
+
 app.use(express.static('./'));
+app.use(express.json());
+
+// ==================== AUTHENTICATION (JWT) ====================
+// Kullanıcı girişi veya misafir oturumu için Token üretir
+app.post('/api/auth/register', (req, res) => {
+    const { username, age, gender, region } = req.body;
+    // Not: Gerçek bir uygulamada burada veritabanına kayıt atılır.
+    // Şimdilik sadece Token üretip geri dönüyoruz.
+    const userPayload = { 
+        id: `user_${Math.random().toString(36).substr(2, 9)}`,
+        username, age, gender, region 
+    };
+    
+    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ success: true, token, user: userPayload });
+});
+
+// Socket.io Middleware: Her bağlantıda Token kontrolü yapar
+io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) return next(new Error("Authentication error: No token provided"));
+    
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) return next(new Error("Authentication error: Invalid token"));
+        socket.decoded = decoded; // Token içindeki kullanıcı bilgisini sokete bağla
+        next();
+    });
+});
 
 // ==================== ROOM DEFINITIONS ====================
 const roomDefs = {

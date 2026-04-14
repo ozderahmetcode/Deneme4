@@ -529,20 +529,53 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('filter-label-region').innerText = matchRegionFilter ? 'Bölge: Açık ✓' : 'Bölge: Kapalı';
     }
 
-    // Sunucu adresi: Deployment'ta (Render/Railway) kendi adresini otomatik alır.
-    if (window.io) {
-        const srvUrl = (window.location.protocol === 'file:') ? 'http://localhost:3000' : window.location.origin;
-        globalSocket = io(srvUrl, { transports: ['websocket', 'polling'], reconnection: true });
+    // ---- AUTHENTICATION & TOKEN MANAGEMENT (Zırhlı Yapı v2.2) ----
+    const srvUrl = (window.location.protocol === 'file:') ? 'http://localhost:3000' : window.location.origin;
 
-        // Initialize WebRTC Clients (Global & Ready to listen)
-        webrtcClient = new AudioChatClient(globalSocket, document.getElementById('remote-audio'), () => {
-            console.log("☎️ Karşı taraf görüşmeyi sonlandırdı.");
-            stopGlobalTimer();
-            showOverlay(document.getElementById('rating-screen'));
-        }, () => {
-            console.log("🔔 WebRTC Bağlantı Sinyali Alındı.");
-            // Sayaç burada başlamıyor, karşılıklı onay (Confirmed) bekliyoruz
-        });
+    async function ensureAuth() {
+        let session = JSON.parse(localStorage.getItem('blindIdSession'));
+        let token = localStorage.getItem('blindIdToken');
+
+        if (!token || !session) {
+            console.log("🔑 Yeni oturum oluşturuluyor...");
+            const response = await fetch(`${srvUrl}/api/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: `User_${Math.floor(Math.random() * 9000) + 1000}`,
+                    age: 22,
+                    gender: 'kadın',
+                    region: 'Türkiye'
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                localStorage.setItem('blindIdToken', data.token);
+                localStorage.setItem('blindIdSession', JSON.stringify(data.user));
+                return data.token;
+            }
+        }
+        return token;
+    }
+
+    // Sunucu adresi: Deployment'ta (Render/Railway) kendi adresini otomatik alır.
+    (async () => {
+        const token = await ensureAuth();
+        if (window.io) {
+            globalSocket = io(srvUrl, { 
+                transports: ['websocket', 'polling'], 
+                reconnection: true,
+                auth: { token } // Sunucu artik bu Token'i kontrol edecek
+            });
+
+            // Initialize WebRTC Clients (Global & Ready to listen)
+            webrtcClient = new AudioChatClient(globalSocket, document.getElementById('remote-audio'), () => {
+                console.log("☎️ Karşı taraf görüşmeyi sonlandırdı.");
+                stopGlobalTimer();
+                showOverlay(document.getElementById('rating-screen'));
+            });
+        }
+    })();
 
         // Karşılıklı Onay Sinyali
         globalSocket.on('call_confirmed', (data) => {
