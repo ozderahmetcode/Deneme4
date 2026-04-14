@@ -24,8 +24,78 @@ let roomClient = null;
 let lastMatchData = null;
 let privateCallClient = null;
 
-// Navigation and Overlay functions are defined later in the file.
+function showTab(targetId, isGoingBack = false) {
+    if (typeof hideOverlays === "function") hideOverlays();
+    const navItem = document.querySelector(`.nav-item[data-target="${targetId}"]`);
+    if (!navItem) return;
+    
+    // UI Logic (Garantili Navigasyon)
+    const allScreens = [document.getElementById('home-screen'), document.getElementById('rooms-screen'), document.getElementById('menu-screen'), document.getElementById('messages-screen'), document.getElementById('profile-screen')];
+    allScreens.forEach(s => { if (s) { s.classList.remove('active'); s.classList.add('hidden'); } });
+    
+    const targetScreen = document.getElementById(targetId);
+    if (targetScreen) {
+        targetScreen.classList.remove('hidden');
+        setTimeout(() => targetScreen.classList.add('active'), 10);
+    }
+}
 
+function showOverlay(screenToShow) {
+    const overlayScreens = [document.getElementById('matching-screen'), document.getElementById('incall-screen'), document.getElementById('rating-screen'), document.getElementById('room-inner-screen'), document.getElementById('active-chat-screen'), document.getElementById('game-matching-screen'), document.getElementById('game-screen')];
+    overlayScreens.forEach(screen => {
+        if (screen) {
+            screen.classList.remove('active');
+            screen.classList.add('hidden');
+            screen.style.zIndex = "20"; 
+            screen.style.display = ""; 
+        }
+    });
+    if (screenToShow) {
+        if (screenToShow.id === 'rating-screen') {
+            try { if (typeof updateRatingDisplay === "function") updateRatingDisplay(); } catch(e) {}
+            try { if (typeof updateStatsUI === "function") updateStatsUI(); } catch(e) {}
+            screenToShow.style.zIndex = "500"; 
+            screenToShow.style.display = "flex"; 
+        }
+        screenToShow.classList.remove('hidden');
+        void screenToShow.offsetWidth;
+        screenToShow.classList.add('active');
+    }
+}
+
+function hideOverlays() { showOverlay(null); }
+
+// ---- GLOBAL CALL LOGIC (Zırhlı Yapı v2.1) ----
+let globalTimeLeft = 0;
+let activeTimerInterval = null;
+
+function startGlobalTimer(seconds, elementId) {
+    clearInterval(activeTimerInterval);
+    globalTimeLeft = seconds;
+    const display = document.getElementById(elementId);
+    if (display) {
+        display.innerText = globalTimeLeft;
+        display.style.fontSize = "3rem";
+    }
+    activeTimerInterval = setInterval(() => {
+        globalTimeLeft--;
+        if (display) display.innerText = globalTimeLeft;
+        if (globalTimeLeft <= 0) {
+            clearInterval(activeTimerInterval);
+            if (typeof webrtcClient !== "undefined" && webrtcClient) webrtcClient.hangUp();
+            if (typeof showOverlay === "function") showOverlay(document.getElementById('rating-screen'));
+        }
+    }, 1000);
+}
+
+function stopGlobalTimer() { clearInterval(activeTimerInterval); }
+
+function checkMutualConfirmation() {
+    if (localConfirmed && remoteConfirmed) {
+        console.log("✅ Karşılıklı onay sağlandı! Sayaç başlıyor.");
+        startGlobalTimer(120, 'active-countdown');
+    }
+}
 
 window.addFriendInCall = function() {
     if (typeof lastMatchData === "undefined" || !lastMatchData || !globalSocket) return;
@@ -76,15 +146,7 @@ function updateProfileUI() {
         const progressFill = document.getElementById('xp-fill');
         const avatarImg = document.getElementById('user-avatar-img');
 
-        if (uText) {
-            uText.innerText = currentUser.username;
-            if (currentUser.is_vip) {
-                uText.classList.add('vip-glow');
-                uText.innerHTML += ' <span class="vip-badge">VIP</span>';
-            } else {
-                uText.classList.remove('vip-glow');
-            }
-        }
+        if (uText) uText.innerText = currentUser.username;
         if (bioText) {
             const age = currentUser.age || 'Gizli';
             const ht = currentUser.height ? currentUser.height + 'cm' : 'Gizli';
@@ -93,8 +155,6 @@ function updateProfileUI() {
         }
         if (avatarImg) {
             avatarImg.src = currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
-            if (currentUser.is_vip) avatarImg.classList.add('vip-avatar-gold');
-            else avatarImg.classList.remove('vip-avatar-gold');
         }
 
         const currentXP = currentUser.xp || 0;
@@ -463,14 +523,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (oppBtn) oppBtn.classList.toggle('active', pref === 'opposite');
         if (mixBtn) mixBtn.classList.toggle('active', pref === 'mixed');
     }
-    window.openAdvancedFilters = function() {
-        if (!currentUser) return;
-        if (currentUser.is_vip) {
-            showOverlay(document.getElementById('advanced-filters-modal'));
-        } else {
-            alert("💎 Elite Özellik: Şehir ve Yaş aralığı seçerek eşleşmek için VIP üye olmalısın!");
-        }
-    };
+    window.toggleRegionFilter = function () {
+        matchRegionFilter = !matchRegionFilter;
+        document.getElementById('filter-region').classList.toggle('active', matchRegionFilter);
+        document.getElementById('filter-label-region').innerText = matchRegionFilter ? 'Bölge: Açık ✓' : 'Bölge: Kapalı';
+    }
 
     // Sunucu adresi: Deployment'ta (Render/Railway) kendi adresini otomatik alır.
     if (window.io) {
@@ -761,60 +818,9 @@ document.addEventListener('DOMContentLoaded', () => {
             globalSocket.emit('get_rooms_info');
         });
 
-        // --- MONETIZATION LISTENERS ---
-        globalSocket.on('balance_update', (data) => {
-            if (currentUser) {
-                currentUser.gold = data.newBalance;
-                document.querySelectorAll('.user-gold-val').forEach(el => el.innerText = data.newBalance);
-            }
-        });
-
-        globalSocket.on('insufficient_funds_stop', (data) => {
-            alert("⚠️ " + data.msg);
-            if (webrtcClient) webrtcClient.hangUp();
-            showTab('home-screen');
-        });
-
-        globalSocket.on('receive_gift', (data) => {
-            const toast = document.createElement('div');
-            toast.className = 'gift-toast';
-            toast.innerHTML = `<i class="fa-solid fa-gift"></i> ${data.from} size bir hediye gönderdi! (+${data.xpGained} XP)`;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 5000);
-            if (currentUser) {
-                currentUser.xp = (currentUser.xp || 0) + data.xpGained;
-                updateProfileUI();
-            }
-        });
-
-        function stopCallTimer() {
-            if (window.matchInterval) clearInterval(window.matchInterval);
-            if (window.callTimerInterval) clearInterval(window.callTimerInterval);
-            if (window.autoStartTimer) clearTimeout(window.autoStartTimer);
-        }
-
-        globalSocket.on('searching', (data) => {
-            const statusText = document.getElementById('match-status-text');
-            if (statusText) {
-                let msg = data.msg || "Kullanıcılar aranıyor...";
-                if (data.poolCount !== undefined) {
-                    msg += `\n(Sıradaki kişi sayısı: ${data.poolCount})`;
-                }
-                statusText.innerText = msg;
-            }
-        });
-Line: 863
-
-        globalSocket.on('peer_disconnected', (data) => {
-            console.log("☎️ Bağlantı koptu:", data.msg);
-            stopCallTimer();
-            if (webrtcClient) webrtcClient.hangUp();
-            showOverlay(document.getElementById('rating-screen'));
-        });
-
         // Gerçek Sunucudan "Eşleşme Bulundu" Sinyali Geldiğinde:
         globalSocket.on('match_found', (data) => {
-            console.log("🔔 [MatchFound] Sunucudan eşleşme sinyali alındı!", data);
+            console.log("Sunucudan eşleşme geldi! Hedef:", data.opponentId);
             lastMatchData = data;
             clearTimeout(matchingInterval);
             if (window.busyTimeout) clearTimeout(window.busyTimeout);
@@ -823,7 +829,7 @@ Line: 863
             const ringing = document.getElementById('dial-ringing');
             if (ringing) { ringing.pause(); ringing.currentTime = 0; }
 
-            // Arayüzü Güncelle
+            // 5 Saniye Geri Sayım Arayüzü
             const statusText = document.getElementById('match-status-text');
             const countdownEl = document.getElementById('connect-countdown');
             const matchAvatar = document.getElementById('match-avatar');
@@ -836,7 +842,7 @@ Line: 863
             }
             if (matchUser) {
                 matchUser.style.display = 'block';
-                matchUser.innerText = data.oppUsername || "Kullanıcı";
+                matchUser.innerText = "Gizli Kullanıcı"; // Veya data.username
             }
 
             // Butonları göster
@@ -846,11 +852,6 @@ Line: 863
             if (acceptBtn) acceptBtn.parentElement.style.display = 'block';
 
             if (statusText) statusText.innerText = "Eşleşme Bulundu!";
-            if (countdownEl) {
-                countdownEl.classList.remove('hidden');
-                countdownEl.innerText = "5";
-            }
-
 
             // Görşme kartında bilgi göster
             if (matchUser) {
@@ -909,13 +910,8 @@ Line: 863
                 }
 
                 if (data.role === 'caller') {
-                    console.log("🏁 Görüşme Başladı Signal!");
-            // Sinyal gönder ki Billing başlasın
-            globalSocket.emit('call_confirmed', { 
-                targetId: data.opponentId, 
-                userId_db: currentUser.id_db || currentUser.username // Demo için username
-            });
-            if (webrtcClient) webrtcClient.startCall(data.opponentId, data.role);
+                    console.log("📞 Arayan rolü: startCall başlatılıyor.");
+                    webrtcClient.startCall(data.opponentId);
                 } else {
                     console.log("👂 Aranan rolü: Teklif (Offer) bekleniyor.");
                     webrtcClient.targetId = data.opponentId;
@@ -1025,48 +1021,29 @@ Line: 863
                 document.getElementById('accept-btn').parentElement.style.display = 'none';
                 document.getElementById('skip-btn').parentElement.style.display = 'none';
 
-                // Sunucuya kuyruğa girme isteği at
-                const targetCity = currentUser?.is_vip ? document.getElementById('adv-filter-city')?.value : "ALL";
-                const targetAge = currentUser?.is_vip ? document.getElementById('adv-filter-age')?.value : "ALL";
-
-                const matchRequest = {
+                // Sunucuya kuyruğa girme isteği at (cinsiyet, bölge, tercih bilgileriyle)
+                globalSocket.emit('find_match', {
                     gender: currentUser?.gender || 'erkek',
                     region: currentUser?.region || 'Marmara',
                     preference: matchGenderPref,
-                    targetCity: targetCity,
-                    ageRange: targetAge,
-                    userId_db: currentUser?.id_db || currentUser?.username,
-                    isVip: currentUser?.is_vip || false,
-                    karma: currentUser?.karma_score || 100,
+                    regionFilter: matchRegionFilter,
+                    age: currentUser?.age || '',
                     username: currentUser?.username || 'Anonim',
-                    avatarUrl: currentUser?.avatarUrl || ''
-                };
-
-                console.log("🚀 [FindMatch] Sunucuya eşleşme isteği gönderiliyor:", matchRequest);
-                globalSocket.emit('find_match', matchRequest);
+                    zodiac: currentUser?.zodiac || ''
+                });
 
                 // Arama sesini çal
                 const ringing = document.getElementById('dial-ringing');
-                if (ringing) {
-                    ringing.currentTime = 0;
-                    ringing.play().catch(e => console.log("Ses oynatılamadı."));
-                }
+                if (ringing) ringing.play().catch(e => console.log("Ses oynatılamadı."));
 
-
+                // 10 Saniye Bekleme ve Meşgul Mesajı
+                if (window.busyTimeout) clearTimeout(window.busyTimeout);
                 window.busyTimeout = setTimeout(() => {
                     const el = document.getElementById('match-status-text');
                     if (el && el.innerText.includes("Aranıyor")) {
                         el.innerText = "Kullanıcılar meşgul, aranıyor...";
                     }
                 }, 10000);
-
-                window.cancelMatch = function() {
-                    if (globalSocket) globalSocket.emit('cancel_match');
-                    if (window.busyTimeout) clearTimeout(window.busyTimeout);
-                    const ringing = document.getElementById('dial-ringing');
-                    if (ringing) { ringing.pause(); ringing.currentTime = 0; }
-                    hideOverlays();
-                };
 
                 clearInterval(matchingInterval);
                 matchingInterval = setTimeout(() => {
@@ -1644,12 +1621,10 @@ Line: 863
 
             document.getElementById('radio-now-playing').classList.add('hidden');
             document.getElementById('radio-player-widget').classList.add('hidden');
-            const grid = document.getElementById('room-participants-grid');
-            if (grid) grid.classList.remove('hidden');
+            document.getElementById('room-participants-grid').classList.remove('hidden');
 
             hideOverlays();
         }
-        window.leaveCurrentRoom = window.leaveRoom; // Alias for index.html
 
 
         function addRoomSystemMessage(text) {
@@ -2382,6 +2357,13 @@ Line: 863
             if (globalSocket) globalSocket.emit('update_preference', { matchPref: pref });
         }
 
+        window.toggleRegionFilter = function () {
+            currentUser.regionFilter = !currentUser.regionFilter;
+            const lbl = document.getElementById('filter-label-region');
+            if (lbl) lbl.innerText = `Bölge: ${currentUser.regionFilter ? 'Açık' : 'Kapalı'}`;
+            document.getElementById('filter-region').classList.toggle('active', currentUser.regionFilter);
+            localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
+        }
 
         window.startVisualSearch = function () {
             const overlay = document.getElementById('visual-search-overlay');
@@ -2453,29 +2435,30 @@ Line: 863
         }
     } // end window.io
 
-    // --- GLOBAL RATING ACTIONS (PREMIUM OVERHAUL) ---
+    // --- GLOBAL RATING ACTIONS (SURVIVOR MODE v4) ---
     window.rateLike = function() {
         console.log("👍 Beğenildi...");
-        if (stats) { stats.likes++; saveStats(); }
-        if (typeof updateRatingDisplay === "function") updateRatingDisplay();
-        alert("Puanın iletildi! +10 XP kazandın.");
-        currentUser.xp += 10;
-        saveUser();
+        try {
+            if (stats) { stats.likes++; saveStats(); }
+            if (typeof updateRatingDisplay === "function") updateRatingDisplay();
+        } catch(e) { console.error("Rate Error (Recovered):", e); }
         showTab('home-screen');
     };
 
     window.rateDislike = function() {
         console.log("👎 Beğenilmedi...");
-        if (stats) { stats.dislikes++; saveStats(); }
-        if (typeof updateRatingDisplay === "function") updateRatingDisplay();
+        try {
+            if (stats) { stats.dislikes++; saveStats(); }
+            if (typeof updateRatingDisplay === "function") updateRatingDisplay();
+        } catch(e) { console.error("Rate Error (Recovered):", e); }
         showTab('home-screen');
     };
 
-    window.addFriendInRating = function() {
-        if (!webrtcClient || !webrtcClient.targetId) {
-            alert("Hata: Kullanıcı bilgisi bulunamadı.");
-            return;
-        }
+    window.skipRating = function() {
+        showTab('home-screen');
+    };
+    window.addFriendInCall = function() {
+        if (!lastMatchData || !webrtcClient || !webrtcClient.targetId) return;
         globalSocket.emit('friend_request', { 
             targetId: webrtcClient.targetId, 
             senderName: currentUser.username,
@@ -2484,32 +2467,6 @@ Line: 863
         alert("Arkadaşlık isteği gönderildi!");
     };
 
-    window.reportUserInRating = function() {
-        if (confirm("Bu kullanıcıyı şikayet etmek istediğinizden emin misiniz?")) {
-            if (stats) { stats.reports++; saveStats(); }
-            alert("Şikayetiniz incelenmek üzere moderatörlere iletildi.");
-        }
-    };
-
-    window.reconnectVIP = function() {
-        if (!currentUser.is_vip) {
-            alert("💎 Bu özellik sadece VIP üyeler içindir!");
-            return;
-        }
-        alert("Tekrar bağlanma özelliği şu an aktif değil, yakında eklenecek!");
-    };
-
-    window.skipRating = function() {
-        showTab('home-screen');
-    };
-
-    window.endCall = function() {
-        console.log("☎️ Görüşme sonlandırılıyor...");
-        if (webrtcClient) webrtcClient.hangUp();
-        showOverlay(document.getElementById('rating-screen'));
-    };
-
     initApp();
     initPTTListeners();
 });
-
