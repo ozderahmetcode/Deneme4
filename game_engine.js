@@ -4,24 +4,27 @@
  */
 
 class XOXGame {
-    constructor(canvasId, isPlayer1, onMove) {
+    constructor(canvasId, isPlayer1, onMove, onScoreUpdate) {
         this.board = Array(9).fill(null);
-        this.isPlayer1 = isPlayer1; // Player 1 is 'X', Player 2 is 'O'
+        this.isPlayer1 = isPlayer1; 
         this.mySymbol = isPlayer1 ? 'X' : 'O';
         this.currentTurn = 'X';
-        this.onMove = onMove; // Callback when local move happens
+        this.onMove = onMove;
+        this.onScoreUpdate = onScoreUpdate; // Callback for score changes
         this.isGameOver = false;
+        this.scores = { 'X': 0, 'O': 0 };
 
         this.initUI(canvasId);
     }
 
     initUI(containerId) {
+        this.containerId = containerId;
         const container = document.getElementById(containerId);
         container.innerHTML = `
             <div class="xox-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; width:280px; margin:0 auto;">
-                ${this.board.map((_, i) => `<div class="xox-cell" data-index="${i}" style="aspect-ratio:1; background:rgba(255,255,255,0.1); border:2px solid var(--gold); border-radius:10px; display:flex; justify-content:center; align-items:center; font-size:2.5rem; font-weight:900; color:white; cursor:pointer;"></div>`).join('')}
+                ${this.board.map((_, i) => `<div class="xox-cell" data-index="${i}" style="aspect-ratio:1; background:rgba(255,255,255,0.1); border:2px solid var(--gold); border-radius:10px; display:flex; justify-content:center; align-items:center; font-size:2.5rem; font-weight:900; color:white; cursor:pointer; transition:all 0.3s;"></div>`).join('')}
             </div>
-            <div id="xox-status" style="text-align:center; margin-top:15px; font-weight:800; color:var(--gold);">Sıra Bekleniyor...</div>
+            <div id="xox-status" style="text-align:center; margin-top:15px; font-weight:800; color:var(--gold); min-height:1.5rem;">Sıra Bekleniyor...</div>
         `;
 
         container.querySelectorAll('.xox-cell').forEach(cell => {
@@ -32,24 +35,25 @@ class XOXGame {
 
     handleCellClick(index) {
         if (this.isGameOver || this.board[index] || this.currentTurn !== this.mySymbol) return;
-
         this.makeMove(index, this.mySymbol);
-        this.onMove(index); // Send to opponent
+        this.onMove(index);
     }
 
     makeMove(index, symbol) {
+        if (this.board[index]) return;
         this.board[index] = symbol;
         const cell = document.querySelector(`.xox-cell[data-index="${index}"]`);
         if (cell) {
             cell.innerText = symbol;
             cell.style.color = symbol === 'X' ? '#ff7675' : '#74b9ff';
             cell.style.boxShadow = `0 0 15px ${symbol === 'X' ? '#ff7675' : '#74b9ff'}`;
+            cell.style.background = "rgba(255,255,255,0.2)";
         }
 
         if (this.checkWin(symbol)) {
-            this.endGame(`${symbol} Kazandı!`);
+            this.handleRoundEnd(`${symbol} Kazandı!`, symbol);
         } else if (this.board.every(cell => cell !== null)) {
-            this.endGame("Berabere!");
+            this.handleRoundEnd("Berabere!", null);
         } else {
             this.currentTurn = (this.currentTurn === 'X') ? 'O' : 'X';
             this.updateStatus();
@@ -67,10 +71,31 @@ class XOXGame {
         return p.some(range => range.every(i => this.board[i] === s));
     }
 
-    endGame(msg) {
+    handleRoundEnd(msg, winner) {
         this.isGameOver = true;
-        document.getElementById('xox-status').innerText = msg;
-        document.getElementById('xox-status').style.fontSize = '1.5rem';
+        const status = document.getElementById('xox-status');
+        status.innerText = msg;
+        status.style.fontSize = '1.5rem';
+        status.style.color = winner ? (winner === 'X' ? '#ff7675' : '#74b9ff') : 'var(--gold)';
+
+        if (winner) {
+            this.scores[winner]++;
+            if (this.onScoreUpdate) this.onScoreUpdate(this.scores);
+        }
+
+        // 1.5 saniye sonra raundu sıfırla
+        setTimeout(() => this.resetRound(), 1500);
+    }
+
+    resetRound() {
+        this.board = Array(9).fill(null);
+        this.isGameOver = false;
+        this.currentTurn = 'X'; // Her raunda X başlar
+        this.initUI(this.containerId);
+    }
+
+    forceEnd() {
+        this.isGameOver = true;
     }
 }
 

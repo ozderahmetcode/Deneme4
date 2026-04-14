@@ -438,6 +438,45 @@
                 </div>
             </div>
 
+            <!-- GAME PLAY SCREEN (New) -->
+            <div id="game-play-screen" class="screen hidden main-tab-screen" style="background: radial-gradient(circle at top, #1e272e 0%, #111 100%);">
+                <div class="screen-header" style="justify-content:center; border-bottom: 2px solid rgba(186,148,91,0.2);">
+                    <div id="game-timer" style="background:var(--gold); color:black; padding:5px 15px; border-radius:20px; font-weight:900; box-shadow:0 0 15px var(--gold); border:2px solid black;">120s</div>
+                </div>
+                
+                <div class="scrollable-content" style="padding:20px 0;">
+                    <!-- Scoreboard -->
+                    <div class="game-scoreboard" style="display:flex; justify-content:space-around; align-items:center; margin-bottom:30px; padding:0 20px;">
+                        <div class="player-score-card me" style="text-align:center;">
+                            <div style="font-size:0.7rem; color:var(--gold); font-weight:800; margin-bottom:5px;">SEN</div>
+                            <div id="my-game-score" style="font-size:2.5rem; font-weight:900; color:white;">0</div>
+                        </div>
+                        <div style="font-size:2rem; font-weight:900; color:var(--gold); opacity:0.5;">VS</div>
+                        <div class="player-score-card opp" style="text-align:center;">
+                            <div style="font-size:0.7rem; color:#aaa; font-weight:800; margin-bottom:5px;">RAKİP</div>
+                            <div id="opp-game-score" style="font-size:2.5rem; font-weight:900; color:white;">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Game Container -->
+                    <div id="game-main-container" style="min-height:350px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                        <!-- Game engine will inject here -->
+                        <div style="color:#444; font-weight:800; text-align:center;">OYUN BAŞLATILIYOR...</div>
+                    </div>
+
+                    <!-- Voice Status Bar -->
+                    <div id="game-voice-status" style="margin-top:20px; text-align:center;">
+                        <span style="background:rgba(255,255,255,0.05); padding:8px 20px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); font-size:0.75rem; color:#888;">
+                            <i class="fa-solid fa-microphone" style="color:#00b894; margin-right:5px;"></i> Sesli Sohbet Aktif
+                        </span>
+                    </div>
+                </div>
+
+                <div class="screen-footer" style="padding:20px; justify-content:center;">
+                    <button class="btn-reject" onclick="leaveGameSession()" style="width:auto; padding:10px 40px; border-radius:30px; font-size:0.9rem;">OYUNDAN AYRIL</button>
+                </div>
+            </div>
+
             <!-- MESSAGES SCREEN -->
             <div id="messages-screen" class="screen hidden main-tab-screen">
                 <div class="screen-header">

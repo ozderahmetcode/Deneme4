@@ -21,8 +21,10 @@ let localConfirmed = false, remoteConfirmed = false;
 let autoStartTimer = null;
 let webrtcClient = null;
 let roomClient = null;
-let lastMatchData = null;
 let privateCallClient = null;
+let activeGameXOX = null;
+let gameTimerInterval = null;
+let currentGameData = null;
 
 function showTab(targetId, isGoingBack = false) {
     if (typeof hideOverlays === "function") hideOverlays();
@@ -41,7 +43,15 @@ function showTab(targetId, isGoingBack = false) {
 }
 
 function showOverlay(screenToShow) {
-    const overlayScreens = [document.getElementById('matching-screen'), document.getElementById('incall-screen'), document.getElementById('rating-screen'), document.getElementById('room-inner-screen'), document.getElementById('active-chat-screen'), document.getElementById('game-matching-screen'), document.getElementById('game-screen')];
+    const overlayScreens = [
+        document.getElementById('matching-screen'), 
+        document.getElementById('incall-screen'), 
+        document.getElementById('rating-screen'), 
+        document.getElementById('room-inner-screen'), 
+        document.getElementById('active-chat-screen'), 
+        document.getElementById('game-matching-screen'), 
+        document.getElementById('game-play-screen')
+    ];
     overlayScreens.forEach(screen => {
         if (screen) {
             screen.classList.remove('active');
@@ -94,6 +104,91 @@ function checkMutualConfirmation() {
     if (localConfirmed && remoteConfirmed) {
         console.log("✅ Karşılıklı onay sağlandı! Sayaç başlıyor.");
         startGlobalTimer(120, 'active-countdown');
+    }
+}
+
+// ---- GAME SYSTEM LOGIC (New v5) ----
+function startGameTimer(seconds) {
+    clearInterval(gameTimerInterval);
+    let timeLeft = seconds;
+    const display = document.getElementById('game-timer');
+    if (display) display.innerText = `${timeLeft}s`;
+    
+    gameTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (display) display.innerText = `${timeLeft}s`;
+        if (timeLeft <= 0) {
+            clearInterval(gameTimerInterval);
+            finishGameSession();
+        }
+    }, 1000);
+}
+
+function finishGameSession() {
+    if (activeGameXOX) activeGameXOX.forceEnd();
+    if (privateCallClient) privateCallClient.stop();
+    alert("⏱️ SÜRE DOLDU! Oyun Bitti. Değerlendirme ekranına yönlendiriliyorsun...");
+    showOverlay(document.getElementById('rating-screen'));
+}
+
+window.startGameMatching = function(gameId) {
+    if (!globalSocket) return;
+    showOverlay(document.getElementById('game-matching-screen'));
+    globalSocket.emit('find_game_match', { gameId });
+};
+
+window.leaveGameSession = function() {
+    if (confirm("Oyundan çıkmak istediğine emin misin? Skorun sıfırlanacak.")) {
+        clearInterval(gameTimerInterval);
+        if (activeGameXOX) activeGameXOX.forceEnd();
+        if (privateCallClient) privateCallClient.stop();
+        showTab('menu-screen');
+    }
+};
+
+function initGameSession(data) {
+    // data: { opponentId, gameId, role }
+    currentGameData = data;
+    showOverlay(document.getElementById('game-play-screen'));
+    
+    // Reset Scoreboard
+    document.getElementById('my-game-score').innerText = "0";
+    document.getElementById('opp-game-score').innerText = "0";
+    
+    const containerId = 'game-main-container';
+    if (data.gameId === 'xox') {
+        activeGameXOX = new XOXGame(containerId, data.role === 'caller', (moveIndex) => {
+            globalSocket.emit('game_move', { targetId: data.opponentId, moveData: moveIndex });
+        }, (scores) => {
+            // Score Update Callback
+            const mySym = activeGameXOX.mySymbol;
+            const oppSym = (mySym === 'X') ? 'O' : 'X';
+            document.getElementById('my-game-score').innerText = scores[mySym];
+            document.getElementById('opp-game-score').innerText = scores[oppSym];
+            // Sync score to opponent
+            globalSocket.emit('game_score', { targetId: data.opponentId, score: scores });
+        });
+    }
+
+    // Start 120s Timer
+    startGameTimer(120);
+
+    // Auto-Start Voice Chat
+    initGameVoiceChat(data.opponentId);
+}
+
+function initGameVoiceChat(targetId) {
+    const localV = document.getElementById('pcall-local-video'); // Use existing or hidden
+    const remoteV = document.getElementById('pcall-remote-video');
+    if (!privateCallClient) {
+        privateCallClient = new PrivateCallClient(globalSocket, localV, remoteV, {
+            onHangup: () => console.log("Game Voice Ended"),
+            onRemoteStream: () => console.log("Game Voice Connected")
+        });
+    }
+    privateCallClient.targetId = targetId;
+    if (currentGameData.role === 'caller') {
+        privateCallClient.start(targetId, 'audio');
     }
 }
 
@@ -835,6 +930,34 @@ document.addEventListener('DOMContentLoaded', async () => {
                 card.style.display = name.includes(query) ? 'flex' : 'none';
             });
         }
+
+        globalSocket.on('room_vip_required', () => {
+            console.warn("💎 VIP gerekli!");
+            alert("💎 Burası sadece VIP kulübüne özel kanki! Girmek için en az 500 altına ihtiyacın var.");
+            if (window.leaveRoom) window.leaveRoom();
+        });
+
+        // --- GAME EVENTS (New v5) ---
+        globalSocket.on('game_match_found', (data) => {
+            console.log("🎮 Oyun eşleşmesi bulundu!", data);
+            initGameSession(data);
+        });
+
+        globalSocket.on('game_move', (data) => {
+            if (activeGameXOX && currentGameData.gameId === 'xox') {
+                const oppSym = (activeGameXOX.mySymbol === 'X') ? 'O' : 'X';
+                activeGameXOX.makeMove(data.moveData, oppSym);
+            }
+        });
+
+        globalSocket.on('game_score', (data) => {
+            // scores: { X, O }
+            const scores = data.score;
+            const mySym = activeGameXOX.mySymbol;
+            const oppSym = (mySym === 'X') ? 'O' : 'X';
+            document.getElementById('my-game-score').innerText = scores[mySym];
+            document.getElementById('opp-game-score').innerText = scores[oppSym];
+        });
 
         globalSocket.on('games_info_update', (gamesInfo) => {
             for (const gId in gamesInfo) {
@@ -1957,6 +2080,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             globalSocket.on('private_call_incoming', (data) => {
                 initPrivateCallClient();
                 currentCallTargetId = data.callerId;
+                
+                // --- AUTO-ACCEPT FOR GAMES (New v5) ---
+                if (currentGameData && currentGameData.opponentId === data.callerId) {
+                    console.log("🎮 Oyun içi sesli sohbet otomatik bağlandı.");
+                    privateCallClient.targetId = data.callerId;
+                    privateCallClient.callType = data.type;
+                    privateCallClient.accept(data.callerId, data.type);
+                    return; // Skip Modal
+                }
+
                 document.getElementById('incall-p-username').innerText = data.callerName;
                 document.getElementById('incall-p-avatar').src = data.callerAvatar;
                 document.getElementById('incall-p-type').innerText = data.type === 'video' ? 'Görüntülü Arama' : 'Sesli Arama';
