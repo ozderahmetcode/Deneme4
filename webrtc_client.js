@@ -1,5 +1,5 @@
 /**
- * 🚀 PROJECT: BLIND ID NEXT-GEN
+ * 🚀 PROJECT: OZDER NEXT-GEN
  * Phase 3: Client-Side WebRTC & Audio Context (Ön Yüz Sesi)
  *
  * NEDEN BU YOLU SEÇTİK?

@@ -1,5 +1,5 @@
 /**
- * 🚀 PROJECT: BLIND ID NEXT-GEN
+ * 🚀 PROJECT: OZDER NEXT-GEN
  * Phase 4: In-Memory Matchmaking Engine (Pure WebRTC Architecture)
  * 
  * BU DOSYADA NE DEĞİŞTİ?

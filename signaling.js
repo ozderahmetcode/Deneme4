@@ -1,5 +1,5 @@
 /**
- * 🚀 PROJECT: BLIND ID NEXT-GEN
+ * 🚀 PROJECT: OZDER NEXT-GEN
  * Phase 3: Backend Signaling Server (WebRTC Sinyalleşme)
  *
  * NEDEN BU YOLU SEÇTİK?

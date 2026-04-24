@@ -206,8 +206,8 @@ window.addFriendInCall = function() {
 function saveUser() {
     if (!currentUser || !usersDB) return;
     usersDB[currentUser.username] = currentUser;
-    localStorage.setItem('blindIdUsers', JSON.stringify(usersDB));
-    localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
+    localStorage.setItem('ozderUsers', JSON.stringify(usersDB));
+    localStorage.setItem('ozderSession', JSON.stringify(currentUser));
     if (typeof updateProfileUI === "function") updateProfileUI();
 }
 
@@ -334,9 +334,9 @@ function updateStatsUI() {
     } catch(e) { console.log("Stats UI Update Error:", e); }
 }
 
-let usersDB = JSON.parse(localStorage.getItem('blindIdUsers')) || {};
-let currentUser = JSON.parse(localStorage.getItem('blindIdSession')) || null;
-let liteMode = JSON.parse(localStorage.getItem('blindIdLiteMode')) || false;
+let usersDB = JSON.parse(localStorage.getItem('ozderUsers')) || {};
+let currentUser = JSON.parse(localStorage.getItem('ozderSession')) || null;
+let liteMode = JSON.parse(localStorage.getItem('ozderLiteMode')) || false;
 let stats = (currentUser && currentUser.username) ? (JSON.parse(localStorage.getItem(currentUser.username + '_stats')) || { totalCalls: 0, talkTimeSeconds: 0, likes: 0, dislikes: 0, skips: 0, reports: 0, callsDone: 0 }) : null;
 let statsChart = null;
 let authScreen, screensContainer, mainNav;
@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     screensContainer = document.getElementById('screens-container');
     mainNav = document.getElementById('main-nav');
 
-    // Girişte izni sadece mikrofon için istiyoruz (Blind ID standardı)
+    // Girişte izni sadece mikrofon için istiyoruz (OZDER standardı)
     function requestPermissions() {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
             navigator.mediaDevices.getUserMedia({ audio: true }).catch(e => console.log("Giriş izni hatası (normal):", e));
@@ -402,7 +402,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ---- LITE MODE ----
     window.toggleLiteMode = function () {
         liteMode = !liteMode;
-        localStorage.setItem('blindIdLiteMode', JSON.stringify(liteMode));
+        localStorage.setItem('ozderLiteMode', JSON.stringify(liteMode));
         applyLiteMode();
     }
     function applyLiteMode() {
@@ -428,9 +428,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const gUser = "Elite_" + Math.floor(Math.random() * 10000);
         if (!usersDB[gUser]) {
             usersDB[gUser] = { username: gUser, password: 'g', age: '', height: '', weight: '', region: 'Marmara', gender: 'erkek', zodiac: '', gold: 100, hasRenamed: false, avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Me", level: 1, xp: 0, history: [], dislikes: 0 };
-            localStorage.setItem('blindIdUsers', JSON.stringify(usersDB));
+            localStorage.setItem('ozderUsers', JSON.stringify(usersDB));
         }
-        currentUser = usersDB[gUser]; localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
+        currentUser = usersDB[gUser]; localStorage.setItem('ozderSession', JSON.stringify(currentUser));
         initApp();
     };
     window.doRegister = function () {
@@ -455,16 +455,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         const u = document.getElementById('login-username').value.trim(), p = document.getElementById('login-password').value.trim();
         if (!u || !p) return;
         if (!usersDB[u] || usersDB[u].password !== p) { alert('Hatalı giriş!'); return; }
-        currentUser = usersDB[u]; localStorage.setItem('blindIdSession', JSON.stringify(currentUser)); initApp();
+        currentUser = usersDB[u]; localStorage.setItem('ozderSession', JSON.stringify(currentUser)); initApp();
     };
     window.doLogout = function () {
         currentUser = null;
-        localStorage.removeItem('blindIdSession');
+        localStorage.removeItem('ozderSession');
         window.location.reload();
     };
 
-    // ---- STATS / BAN ----
-    let stats = JSON.parse(localStorage.getItem('blindIdStats')) || { totalCalls: 0, talkTimeSeconds: 0, likes: 0, skips: 0, reports: 0, dislikes: 0, banStatus: null };
+    // ---- STATS / BAN ---- (Global stats değişkenini kullanıyoruz, duplicate kaldırıldı)
+    if (!stats) stats = { totalCalls: 0, talkTimeSeconds: 0, likes: 0, skips: 0, reports: 0, dislikes: 0, banStatus: null };
     if (stats.dislikes === undefined) stats.dislikes = 0;
     function checkBanLogic() {
         if (stats.totalCalls < 100 || stats.banStatus === 'perma') return;
@@ -597,16 +597,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     // ---- CALL TIMERS & MATCHING (WEBRTC INTEGRATION) ----
-    let matchingInterval, activeTimerInterval, globalTimeLeft = 0, currentCallStart = 0;
-    let localConfirmed = false, remoteConfirmed = false;
+    // NOT: matchingInterval, activeTimerInterval, globalTimeLeft, localConfirmed, remoteConfirmed,
+    // checkMutualConfirmation → global scope'ta tanımlı (satır 19-108), burada tekrar tanımlamıyoruz.
+    let currentCallStart = 0;
     let opponentName = "Anonim";
-
-    function checkMutualConfirmation() {
-        if (localConfirmed && remoteConfirmed) {
-            console.log("✅ Karşılıklı onay sağlandı! Sayaç başlıyor.");
-            startGlobalTimer(120, 'active-countdown');
-        }
-    }
     let matchGenderPref = 'mixed'; // Default to mixed for better match rate
     let matchRegionFilter = false;
 
@@ -628,8 +622,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const srvUrl = (window.location.protocol === 'file:') ? 'http://localhost:3000' : window.location.origin;
 
     async function ensureAuth() {
-        let session = JSON.parse(localStorage.getItem('blindIdSession'));
-        let token = localStorage.getItem('blindIdToken');
+        let session = JSON.parse(localStorage.getItem('ozderSession'));
+        let token = localStorage.getItem('ozderToken');
 
         if (!token || !session) {
             console.log("🔑 Yeni oturum oluşturuluyor...");
@@ -645,8 +639,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             const data = await response.json();
             if (data.success) {
-                localStorage.setItem('blindIdToken', data.token);
-                localStorage.setItem('blindIdSession', JSON.stringify(data.user));
+                localStorage.setItem('ozderToken', data.token);
+                localStorage.setItem('ozderSession', JSON.stringify(data.user));
                 return data.token;
             }
         }
@@ -823,7 +817,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div style="text-align:center;">
                             <img src="${avatar}" class="speaker-avatar-${p.id}" 
                                  onclick="window.openUserPreview('${p.username}', '${p.id}', '${avatar}')"
-                                 onclick="openUserPreview('${p.username}', '${p.id}', '${avatar}')"
                                  style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}; cursor:pointer; transition: all 0.3s;" 
                                  onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}'">
                             <div style="font-size:0.6rem; color:white; margin-top:5px; max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.username}</div>
@@ -1237,7 +1230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert(`Ses Filtresi Değişti: ${voiceFilters[vFilterIdx]}`);
         }
 
-        document.getElementById('hangup-btn')?.addEventListener('click', () => { finishCall(Math.floor((Date.now() - currentCallStart) / 1000)); });
+        // hangup-btn event listener yukarıda (satır 1133) zaten tanımlı, duplicate kaldırıldı
 
         function finishCall(talkedDuration) {
             clearInterval(activeTimerInterval);
@@ -1401,7 +1394,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         window.doLogout = function () {
             if (confirm("Çıkış yapmak istediğinize emin misiniz?")) {
-                localStorage.removeItem('blindIdSession');
+                localStorage.removeItem('ozderSession');
                 location.reload();
             }
         }
@@ -1409,8 +1402,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.deleteAccount = function () {
             if (confirm("DİKKAT! Hesabınızı tamamen silmek üzeresiniz. Bu işlem GERİ ALINAMAZ. Onaylıyor musunuz?")) {
                 delete usersDB[currentUser.username];
-                localStorage.setItem('blindIdUsers', JSON.stringify(usersDB));
-                localStorage.removeItem('blindIdSession');
+                localStorage.setItem('ozderUsers', JSON.stringify(usersDB));
+                localStorage.removeItem('ozderSession');
                 alert("Hesabınız silindi. Görüşmek üzere.");
                 location.reload();
             }
@@ -2523,7 +2516,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 document.getElementById('filter-mixed').classList.add('active');
             }
-            localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
+            localStorage.setItem('ozderSession', JSON.stringify(currentUser));
             if (globalSocket) globalSocket.emit('update_preference', { matchPref: pref });
         }
 
@@ -2532,7 +2525,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const lbl = document.getElementById('filter-label-region');
             if (lbl) lbl.innerText = `Bölge: ${currentUser.regionFilter ? 'Açık' : 'Kapalı'}`;
             document.getElementById('filter-region').classList.toggle('active', currentUser.regionFilter);
-            localStorage.setItem('blindIdSession', JSON.stringify(currentUser));
+            localStorage.setItem('ozderSession', JSON.stringify(currentUser));
         }
 
         window.startVisualSearch = function () {
@@ -2603,6 +2596,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } // end window.io
 
+    // --- EKSİK FONKSİYON TANIMLARI (ReferenceError Önleme) ---
+    window.switchMainTab = function(tabName) {
+        const tabMap = { 'messages': 'messages-screen', 'home': 'home-screen', 'rooms': 'rooms-screen', 'games': 'menu-screen', 'profile': 'profile-screen' };
+        const targetId = tabMap[tabName] || tabName;
+        if (typeof showTab === 'function') showTab(targetId);
+    };
+
+    window.reconnectCallVip = function() {
+        alert('💎 Tekrar Bağlanma özelliği VIP üyelere özeldir! VIP olmak için ayarlardan premium paketlere göz atın.');
+    };
+
+    window.openGameChat = function() {
+        alert('Oyun içi sohbet yakında aktif olacak!');
+    };
     // --- GLOBAL RATING ACTIONS (SURVIVOR MODE v4) ---
     window.rateLike = function() {
         console.log("👍 Beğenildi...");

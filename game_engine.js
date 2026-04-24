@@ -1,5 +1,5 @@
 /**
- * Blind ID Gamified Game Engine
+ * OZDER Gamified Game Engine
  * Handles XOX (Tic Tac Toe) and Tetris for PvP matches.
  */
 

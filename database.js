@@ -1,5 +1,5 @@
 /**
- * 🚀 PROJECT: BLIND ID NEXT-GEN
+ * 🚀 PROJECT: OZDER NEXT-GEN
  * Phase 2: PostgreSQL Database Schema & Connection Setup
  *
  * NEDEN BU YOLU SEÇTİK? (Genel Mimari Kararları)
@@ -24,7 +24,7 @@ const connectionConfig = process.env.DATABASE_URL
     : {
         user: process.env.DB_USER || 'postgres',
         host: process.env.DB_HOST || 'localhost',
-        database: process.env.DB_NAME || 'blindid_db',
+        database: process.env.DB_NAME || 'ozder_db',
         password: process.env.DB_PASS || '123456',
         port: process.env.DB_PORT || 5432,
       };
@@ -97,8 +97,6 @@ const UserRepository = {
         return res.rows[0];
     }
 };
-
-module.exports = { pool, initDB, UserRepository };
 
 module.exports = { pool, initDB, UserRepository };
 

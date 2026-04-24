@@ -4,6 +4,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const MatchmakerService = require('./matchmaker_service_');
 
 const app = express();
 const server = http.createServer(app);
@@ -376,7 +377,9 @@ io.on('connection', (socket) => {
 
         // Matchmaking ve Havuz Temizliği
         waitingPool = waitingPool.filter(w => w.socketId !== socket.id);
-        MatchmakerService.handleDisconnect(socket.id);
+        if (MatchmakerService && typeof MatchmakerService.handleDisconnect === 'function') {
+            MatchmakerService.handleDisconnect(socket.id);
+        }
         for (const id in gameWaitingPools) { if (gameWaitingPools[id] === socket.id) gameWaitingPools[id] = null; }
     });
 });

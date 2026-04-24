@@ -267,27 +267,7 @@ body, html {
 .trust-label { font-size: 0.7rem; font-weight: 800; color: #888; margin-bottom: 5px; letter-spacing: 1.5px; }
 .trust-value { font-size: 2rem; font-weight: 900; color: var(--gold); }
 
-/* Rooms & Radio Cards */
-.room-card {
-    background: #fff;
-    border-radius: 20px;
-    padding: 15px 20px;
-    margin-bottom: 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    border: 1px solid #eee;
-    cursor: pointer;
-    transition: all 0.3s;
-    position: relative;
-    overflow: hidden;
-}
-.room-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
-.room-card h3 { font-size: 1rem; margin: 0 0 4px 0; color: var(--text-dark); font-weight: 800; }
-.room-card p { font-size: 0.7rem; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
-.member-count { background: #f1f2f6; padding: 6px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 800; color: #555; display: flex; align-items: center; gap: 5px; }
-.member-count i { font-size: 0.7rem; color: #aaa; }
+/* Rooms & Radio Cards — Ana tanım satır 767'de */
 
 .rooms-list {
     min-height: 200px;
@@ -806,8 +786,6 @@ canvas { box-shadow: 0 0 20px rgba(78, 84, 200, 0.3); background: #0f172a; }
 .modal-box { background: white; color: var(--text-dark); padding: 25px; border-radius: 20px; width: 90%; max-width: 350px; display: flex; flex-direction: column; gap:15px; box-shadow: 0 15px 40px rgba(0,0,0,0.2);}
 .modal-box h3 { font-weight: 800; color: var(--text-dark); text-align: center; }
 .avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.avatar-opt { width: 100%; aspect-ratio: 1; border-radius: 50%; cursor: pointer; border: 4px solid transparent; background: #f1f2f6;}
-.avatar-opt.selected { border-color: var(--primary); }
 
 /* MODAL & STORE STYLES */
 .avatar-opt {
