@@ -1,70 +1,116 @@
 /**
  * 🚀 PROJECT: OZDER NEXT-GEN
- * Phase 3: Backend Signaling Server (WebRTC Sinyalleşme)
- *
- * NEDEN BU YOLU SEÇTİK?
- * 1. Payload Hafifliği: WebRTC sinyalleşmesi (SDP ve ICE dataları) oldukça büyüktür. Veritabanını kirletmemek için
- * bu verileri asla kaydetmiyoruz. Gelen 'offer' anında 'targetUserId' üzerinden direkt yönlendiriliyor.
- * 2. Room (Oda) Mantığı: Karmaşık dizi takibi yerine, eşleşenleri Socket.io'nun native `room` özelliğine alıyoruz. 
- * İkiden fazla kişi giremesin diye oda izolasyonu sağlandı.
+ * Modül: WebRTC Sinyalleşme (Signaling)
+ * 
+ * server.js'den ayrıştırılmış, bağımsız sinyal modülü.
+ * 1-on-1 eşleşme, oda içi ses ve özel arama sinyallerini yönetir.
  */
 
-const { Server } = require("socket.io");
+function setupSignaling(io) {
+    // Bu fonksiyon io.on('connection') callback'i içinde çağrılır
+    // Her socket için sinyal eventlerini bağlar
+    return {
+        /**
+         * Socket'e tüm WebRTC sinyal eventlerini bağla
+         */
+        attachToSocket(socket) {
+            // --- 1-ON-1 WEBRTC SIGNALING ---
+            socket.on("webrtc_offer", (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit("webrtc_offer", { senderId: socket.id, sdp: p.sdp });
+            });
 
-function setupSignaling(server) {
-    // Standart HTTP Server üzerinden ayağa kalkan Socket.io Motoru
-    const io = new Server(server, {
-        cors: {
-            origin: "*", // Prod ortamında bu domainle kısıtlanır
-            methods: ["GET", "POST"]
+            socket.on("webrtc_answer", (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit("webrtc_answer", { senderId: socket.id, sdp: p.sdp });
+            });
+
+            socket.on("webrtc_ice_candidate", (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit("webrtc_ice_candidate", { senderId: socket.id, candidate: p.candidate });
+            });
+
+            socket.on('end_call', (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit('peer_disconnected', { msg: 'Disconnected' });
+            });
+
+            // --- ROOM WEBRTC SIGNALING (Isolated namespace) ---
+            socket.on("room_webrtc_offer", (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit("room_webrtc_offer", { senderId: socket.id, sdp: p.sdp });
+            });
+
+            socket.on("room_webrtc_answer", (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit("room_webrtc_answer", { senderId: socket.id, sdp: p.sdp });
+            });
+
+            socket.on("room_webrtc_ice_candidate", (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit("room_webrtc_ice_candidate", { senderId: socket.id, candidate: p.candidate });
+            });
+
+            // --- PRIVATE CALL SIGNALING (DM) ---
+            socket.on('private_call_init', (data) => {
+                if (!data || !data.targetId) return;
+                io.to(data.targetId).emit('private_call_incoming', {
+                    callerId: socket.id,
+                    type: data.type,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar
+                });
+            });
+
+            socket.on('private_call_signal', (data) => {
+                if (!data || !data.targetId) return;
+                io.to(data.targetId).emit('private_call_signal', {
+                    senderId: socket.id,
+                    signal: data.signal
+                });
+            });
+
+            socket.on('private_call_reject', (data) => {
+                if (!data || !data.targetId) return;
+                io.to(data.targetId).emit('private_call_rejected', { senderId: socket.id });
+            });
+
+            socket.on('private_call_hangup', (data) => {
+                if (!data || !data.targetId) return;
+                io.to(data.targetId).emit('private_call_finished', { senderId: socket.id });
+            });
+
+            // --- GAME SIGNALING ---
+            socket.on('game_move', (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit('game_move', { senderId: socket.id, moveData: p.moveData });
+            });
+
+            socket.on('game_score', (p) => {
+                if (!p || !p.targetId) return;
+                io.to(p.targetId).emit('game_score', { senderId: socket.id, score: p.score });
+            });
+
+            // --- DM MESSAGING ---
+            socket.on('send_message', (data) => {
+                if (!data || !data.targetId) return;
+                io.to(data.targetId).emit('receive_message', {
+                    text: data.text,
+                    senderId: socket.id,
+                    type: data.type || 'text',
+                    photoData: data.photoData,
+                    audioData: data.audioData,
+                    ephemeral: data.ephemeral
+                });
+            });
+
+            // --- MIC STATUS ---
+            socket.on('mic_status_change', (data) => {
+                if (!data || !data.targetId) return;
+                io.to(data.targetId).emit('mic_status_change', { senderId: socket.id, isMuted: data.isMuted });
+            });
         }
-    });
-
-    io.on("connection", (socket) => {
-        console.log(`📡 Yeni soket bağlantısı: ${socket.id}`);
-
-        // Auth doğrulama (Mock)
-        const userId = socket.handshake.auth.userId; 
-        if(userId) socket.join(userId); // Kullanıcı kendi özel odasına atanır (Birebir veri iletimi için)
-
-        // 1. WEBRTC "OFFER" (Arama teklifi başlatıldığında)
-        socket.on("webrtc_offer", (payload) => {
-            // Sadece gerekli olanı (SDP) hedef kişiye ilet (Lightweight payload prensibi)
-            socket.to(payload.targetId).emit("webrtc_offer", {
-                senderId: userId,
-                sdp: payload.sdp 
-            });
-        });
-
-        // 2. WEBRTC "ANSWER" (Karşı taraf kabul ettiğinde)
-        socket.on("webrtc_answer", (payload) => {
-            socket.to(payload.targetId).emit("webrtc_answer", {
-                senderId: userId,
-                sdp: payload.sdp
-            });
-        });
-
-        // 3. WEBRTC "ICE CANDIDATE" (İki cihazın IP port delme işlemleri için pin göndermesi)
-        socket.on("webrtc_ice_candidate", (payload) => {
-            socket.to(payload.targetId).emit("webrtc_ice_candidate", {
-                senderId: userId,
-                candidate: payload.candidate
-            });
-        });
-
-        // 4. Görüşme Sonlandırıldığında (Kasıtlı veya Kopma)
-        socket.on("end_call", (payload) => {
-            socket.to(payload.targetId).emit("peer_disconnected", { msg: "Karşı taraf görüşmeyi sonlandırdı." });
-        });
-
-        socket.on("disconnect", () => {
-            console.log(`🔌 Bağlantı koptu: ${socket.id}`);
-            // TODO: Eğer aktif eşleşmesi varsa DB.is_busy = false update'i atılmalı
-        });
-    });
-
-    console.log("🟢 Socket.io Sinyalleşme Motoru (WebRTC) Hazır!");
-    return io;
+    };
 }
 
 module.exports = setupSignaling;

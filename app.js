@@ -1,5 +1,13 @@
 "use strict";
-// Build: 2026.04.13.0725 - Premium Dashboard & Quest Fix
+// Build: 2026.04.25.1500 - OZDER v2.0 — XSS Protected + Modular
+
+// ---- XSS KORUMALARI (Güvenli innerHTML) ----
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
 
 // ---- GLOBAL PLAYER & DATA (File-level access) ----
 const radioPlayer = new Audio();
@@ -298,13 +306,13 @@ function renderFriendsList() {
                     <div class="f-info">
                         <img src="${f.avatar}" class="f-avatar">
                         <div>
-                            <div class="f-name">${f.username}</div>
+                            <div class="f-name">${escapeHtml(f.username)}</div>
                             <div class="f-trust"><i class="fa-solid fa-shield-halved"></i> Güven: ${f.trust || '98%'}</div>
                         </div>
                     </div>
                     <div class="f-actions">
                         <button class="f-btn dm" onclick="switchMainTab('messages')" title="Mesaj Gönder"><i class="fa-solid fa-paper-plane"></i></button>
-                        <button class="f-btn delete" onclick="removeFriend('${f.username}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
+                        <button class="f-btn delete" onclick="removeFriend('${escapeHtml(f.username)}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
                     </div>
                 </div>
             `;
@@ -742,7 +750,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         globalSocket.on('receive_message', (data) => {
             const container = document.getElementById('chat-messages-container');
             if (container) {
-                container.innerHTML += `<div class="chat-bubble them"><span>${data.text}</span></div>`;
+                container.innerHTML += `<div class="chat-bubble them"><span>${escapeHtml(data.text)}</span></div>`;
                 container.scrollTop = container.scrollHeight;
             }
         });
@@ -754,24 +762,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             addRoomMessage(data);
         });
 
-        // Mesaj Ekleme Yardımcısı (Like/Report Butonları ile)
+        // Mesaj Ekleme Yardımcısı (XSS Korumalı)
         window.addRoomMessage = function (data) {
             const container = document.getElementById('room-messages-container');
             if (!container) return;
             const isMe = data.senderId === globalSocket.id;
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const msgId = data.msgId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            const safeUsername = escapeHtml(data.username);
+            const safeText = escapeHtml(data.text);
 
             const msgHtml = `
-                <div class="chat-bubble ${isMe ? 'me' : 'them'}" id="${msgId}">
+                <div class="chat-bubble ${isMe ? 'me' : 'them'}" id="${escapeHtml(msgId)}">
                     <div style="font-size:0.6rem; font-weight:800; opacity:0.6; margin-bottom:2px; display:flex; justify-content:space-between;">
-                        <span>${data.username} • ${timeStr}</span>
+                        <span>${safeUsername} • ${timeStr}</span>
                         ${!isMe ? `<div class="chat-actions">
                             <button class="action-btn like" onclick="likeMessage(this)"><i class="fa-solid fa-heart"></i></button>
-                            <button class="action-btn report" onclick="reportMessage('${data.username}')"><i class="fa-solid fa-triangle-exclamation"></i></button>
+                            <button class="action-btn report" onclick="reportMessage('${safeUsername}')"><i class="fa-solid fa-triangle-exclamation"></i></button>
                         </div>` : ''}
                     </div>
-                    <span>${data.text}</span>
+                    <span>${safeText}</span>
                 </div>
             `;
             container.innerHTML += msgHtml;
@@ -2039,10 +2049,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (el) el.innerHTML = '<span style="color:#aaa; font-size:0.7rem;">🔒 Tek kullanımlık fotoğrafın süresi doldu</span>';
                         }, 5000);
                     } else {
-                        container.innerHTML += `<div class="chat-bubble them"><img src="${data.photoData}" style="max-width:200px; border-radius:10px;"></div>`;
+                        container.innerHTML += `<div class="chat-bubble them"><img src="${escapeHtml(data.photoData)}" style="max-width:200px; border-radius:10px;"></div>`;
                     }
                 } else {
-                    container.innerHTML += `<div class="chat-bubble them"><span>${data.text}</span></div>`;
+                    container.innerHTML += `<div class="chat-bubble them"><span>${escapeHtml(data.text)}</span></div>`;
                 }
                 container.scrollTop = container.scrollHeight;
             });
@@ -2270,13 +2280,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="f-info">
                             <img src="${f.avatar}" class="f-avatar">
                             <div>
-                                <div class="f-name">${f.username}</div>
+                                <div class="f-name">${escapeHtml(f.username)}</div>
                                 <div class="f-trust"><i class="fa-solid fa-shield-halved"></i> Güven: ${f.trust || '98%'}</div>
                             </div>
                         </div>
                         <div class="f-actions">
                             <button class="f-btn dm" onclick="switchMainTab('messages')" title="Mesaj Gönder"><i class="fa-solid fa-paper-plane"></i></button>
-                            <button class="f-btn delete" onclick="removeFriend('${f.username}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
+                            <button class="f-btn delete" onclick="removeFriend('${escapeHtml(f.username)}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
                         </div>
                     </div>
                 `;

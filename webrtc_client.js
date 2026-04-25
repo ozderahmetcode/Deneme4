@@ -1,24 +1,47 @@
 /**
  * 🚀 PROJECT: OZDER NEXT-GEN
- * Phase 3: Client-Side WebRTC & Audio Context (Ön Yüz Sesi)
- *
- * NEDEN BU YOLU SEÇTİK?
- * 1. Coturn & STUN: Sadece Google'ın ücretsiz STUN'ını kullanırsak, mobil ağlardaki CGNAT ve kurumsal firewall'ları 
- * delemeyiz ve eşleşen 10 kişiden 4'ünün sesi gitmez. Bu yüzden `turn:` sunucusu zorunlu olarak listeye eklendi.
- * 2. Gürültü Engelleme (Constraint): Mikrofonu alırken navigator bazında `noiseSuppression` ve `echoCancellation` 
- * direkt true set edildi. RNNoise gibi hantal AI tabanlı external kütüphaneler yerine native hardware ivmeli gürültü engellemeyi seçtik ki Lite Mode (Düşük performans cihazlar) patlamasın.
- * 3. Lazy İzinler: Mikrofon iznini sayfa açılır açılmaz İSTEMİYORUZ (UX çökeltir). Sadece Eşleşme butonuna basınca istenir.
+ * Modül: Client-Side WebRTC & Audio Context
+ * 
+ * ICE Server Yapılandırması:
+ * 1. Google STUN → Hızlı NAT deşme (çoğu durumda yeterli)
+ * 2. OpenRelay TURN → Mobil ağ/firewall arkası kullanıcılar için fallback
+ *    (Metered.ca ücretsiz TURN — 500GB/ay)
+ * 
+ * Güvenlik:
+ * - Socket listener'lar constructor'da bir kez bağlanır, tekrar eden bağlanma engellenir
+ * - Mikrofon izni lazy olarak (eşleşme butonuna basınca) istenir
  */
 
+// --- Merkezi ICE Sunucu Konfigürasyonu ---
+const OZDER_ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    // OpenRelay TURN Sunucusu (Metered.ca Free Tier)
+    // Not: Üretimde kendi credentials'larınızı https://www.metered.ca/tools/openrelay/ adresinden alın
+    {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    }
+];
+
+// ==================== 1-ON-1 AUDIO CHAT ====================
 class AudioChatClient {
-    constructor(socketInstance, remoteAudioElement, onHangUp) {
+    constructor(socketInstance, remoteAudioElement, onHangUp, onConnect) {
         this.socket = socketInstance;
         this.remoteAudio = remoteAudioElement;
         this.peerConnection = null;
         this.localStream = null;
         this.targetId = null;
         this.onHangUp = onHangUp;
-        this.onConnect = arguments[3] || null; // New Connect Callback
+        this.onConnect = onConnect || null;
+        this._listenersAttached = false;
 
         this._initSocketListeners();
     }
@@ -68,6 +91,10 @@ class AudioChatClient {
     }
 
     _initSocketListeners() {
+        // Sızıntı önleme: listener'lar sadece bir kez bağlanır
+        if (this._listenersAttached) return;
+        this._listenersAttached = true;
+
         this.socket.on("webrtc_offer", async (data) => {
             console.log("📥 Gelen Teklif (Offer) - Sender:", data.senderId);
             this.targetId = data.senderId;
@@ -122,13 +149,7 @@ class AudioChatClient {
             console.log("♻️ Eski bağlantı temizleniyor.");
             this.peerConnection.close();
         }
-        this.peerConnection = new RTCPeerConnection({
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
-            ]
-        });
+        this.peerConnection = new RTCPeerConnection({ iceServers: OZDER_ICE_SERVERS });
 
         this.peerConnection.onicecandidate = (event) => {
             if (event.candidate && this.targetId) {
@@ -144,7 +165,7 @@ class AudioChatClient {
             if (this.remoteAudio.srcObject !== event.streams[0]) {
                 this.remoteAudio.srcObject = event.streams[0];
                 this.remoteAudio.play().catch(e => console.log("Matching audio play error:", e));
-                if (this.onConnect) this.onConnect(); // Signal connection established
+                if (this.onConnect) this.onConnect();
             }
         };
     }
@@ -155,7 +176,6 @@ class AudioChatClient {
                 track.enabled = !isMuted;
             });
             console.log(`🎤 Mikrofon Durumu: ${isMuted ? 'SUSTURULDU' : 'AKTİF'}`);
-            // Diğer tarafa sinyal gönder
             if (this.targetId) {
                 this.socket.emit("mic_status_change", { targetId: this.targetId, isMuted });
             }
@@ -167,7 +187,7 @@ class AudioChatClient {
             const audioTrack = this.localStream.getAudioTracks()[0];
             if (audioTrack) {
                 const newState = !audioTrack.enabled;
-                this.setMute(!newState); // State is inverted in logic
+                this.setMute(!newState);
                 return newState;
             }
         }
@@ -183,6 +203,7 @@ class AudioChatClient {
     }
 }
 
+// ==================== ROOM AUDIO (Multi-Peer) ====================
 class RoomAudioClient {
     constructor(socket, container, callbacks) {
         this.socket = socket;
@@ -190,7 +211,7 @@ class RoomAudioClient {
         this.roomId = null;
         this.peers = {};
         this.localStream = null;
-        this.isMuted = false; // YENİ: Başlangıç susturma durumu
+        this.isMuted = false;
         this.callbacks = callbacks || {};
         this._boundListeners = {};
         this._initSocketListeners();
@@ -203,11 +224,8 @@ class RoomAudioClient {
                 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
             });
             
-            // YENİ: Eğer odaya girerken susturulmuş olmamız gerekiyorsa (PTT) hemen uygula
             if (this.isMuted) {
-                this.localStream.getAudioTracks().forEach(track => {
-                    track.enabled = false;
-                });
+                this.localStream.getAudioTracks().forEach(track => { track.enabled = false; });
             }
 
             this.socket.emit('join_room', { roomId, ...userData });
@@ -276,21 +294,12 @@ class RoomAudioClient {
     _createPeer(socketId) {
         if (this.peers[socketId]) return this.peers[socketId];
 
-        const pc = new RTCPeerConnection({
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
-            ]
-        });
+        const pc = new RTCPeerConnection({ iceServers: OZDER_ICE_SERVERS });
         this.peers[socketId] = pc;
 
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
-                // YENİ: Başlangıçta susturulmuşsa track'i susturarak ekle
-                if (track.kind === 'audio' && this.isMuted) {
-                    track.enabled = false;
-                }
+                if (track.kind === 'audio' && this.isMuted) { track.enabled = false; }
                 pc.addTrack(track, this.localStream);
             });
         }
@@ -328,6 +337,7 @@ class RoomAudioClient {
     }
 
     leave() {
+        // Listener sızıntısını önle — çıkışta tüm listener'ları kaldır
         this.socket.off('room_participants', this._boundListeners.onParticipants);
         this.socket.off('room_user_joined', this._boundListeners.onUserJoined);
         this.socket.off('room_user_left', this._boundListeners.onUserLeft);
@@ -343,15 +353,11 @@ class RoomAudioClient {
     }
 
     setMuteState(isMuted) {
-        this.isMuted = isMuted; // Durumu hafızaya al
+        this.isMuted = isMuted;
         if (this.localStream) {
-            // 1. Yerel stream üzerindeki trackleri kontrol et
             const tracks = this.localStream.getAudioTracks();
-            tracks.forEach(track => {
-                track.enabled = !isMuted;
-            });
+            tracks.forEach(track => { track.enabled = !isMuted; });
 
-            // 2. TÜM PeerConnection göndericilerini (Senders) kontrol et (Kesin çözüm)
             for (const socketId in this.peers) {
                 const pc = this.peers[socketId];
                 pc.getSenders().forEach(sender => {
@@ -368,6 +374,7 @@ class RoomAudioClient {
     }
 }
 
+// ==================== PRIVATE CALL (DM Audio/Video) ====================
 class PrivateCallClient {
     constructor(socket, localVideoEl, remoteVideoEl, callbacks) {
         this.socket = socket;
@@ -378,26 +385,60 @@ class PrivateCallClient {
         this.localStream = null;
         this.targetId = null;
         this.callType = 'audio';
+        this._listenersAttached = false;
         this._initListeners();
     }
 
     _initListeners() {
+        // Sızıntı önleme
+        if (this._listenersAttached) return;
+        this._listenersAttached = true;
+
         this.socket.on('private_call_signal', async (data) => {
             if(!this.targetId || this.targetId !== data.senderId) return;
             const signal = data.signal;
-            if(signal.type === 'offer') {
-                await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
-                const answer = await this.pc.createAnswer();
-                await this.pc.setLocalDescription(answer);
-                this.socket.emit('private_call_signal', { targetId: this.targetId, signal: this.pc.localDescription });
-            } else if(signal.type === 'answer') {
-                await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
-            } else if(signal.candidate) {
-                await this.pc.addIceCandidate(new RTCIceCandidate(signal));
+            try {
+                if(signal.type === 'offer') {
+                    if (!this.pc) this._createPC();
+                    await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
+                    const answer = await this.pc.createAnswer();
+                    await this.pc.setLocalDescription(answer);
+                    this.socket.emit('private_call_signal', { targetId: this.targetId, signal: this.pc.localDescription });
+                } else if(signal.type === 'answer') {
+                    await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
+                } else if(signal.candidate) {
+                    await this.pc.addIceCandidate(new RTCIceCandidate(signal));
+                }
+            } catch(e) {
+                console.error("Private call signal error:", e);
             }
         });
         this.socket.on('private_call_finished', () => this.stop(false));
         this.socket.on('private_call_rejected', () => { alert("Arama reddedildi."); this.stop(false); });
+    }
+
+    /**
+     * Gelen özel aramayı kabul et (Madde 8 — Eksik metod eklendi)
+     */
+    async accept(callerId, type) {
+        this.targetId = callerId;
+        this.callType = type || 'audio';
+        try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: true, 
+                video: this.callType === 'video' 
+            });
+            if(this.localVideo && this.callType === 'video') { 
+                this.localVideo.srcObject = this.localStream; 
+                this.localVideo.play(); 
+            }
+        } catch(e) { 
+            alert("Arama için izin gereklidir."); 
+            return; 
+        }
+        this._createPC();
+        // Offer zaten private_call_signal event'i ile gelecek — PC hazır bekliyor
+        console.log(`📞 Gelen arama kabul edildi: ${callerId} (${this.callType})`);
     }
 
     async start(targetId, type) {
@@ -414,19 +455,30 @@ class PrivateCallClient {
     }
 
     _createPC() {
-        this.pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-        this.localStream.getTracks().forEach(track => this.pc.addTrack(track, this.localStream));
-        this.pc.onicecandidate = (event) => { if (event.candidate) this.socket.emit('private_call_signal', { targetId: this.targetId, signal: event.candidate }); };
+        if (this.pc) { this.pc.close(); }
+        this.pc = new RTCPeerConnection({ iceServers: OZDER_ICE_SERVERS });
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => this.pc.addTrack(track, this.localStream));
+        }
+        this.pc.onicecandidate = (event) => { 
+            if (event.candidate) this.socket.emit('private_call_signal', { targetId: this.targetId, signal: event.candidate }); 
+        };
         this.pc.ontrack = (event) => {
-            if(this.remoteVideo) { this.remoteVideo.srcObject = event.streams[0]; this.remoteVideo.play().catch(e => console.log(e)); }
+            if(this.remoteVideo) { 
+                this.remoteVideo.srcObject = event.streams[0]; 
+                this.remoteVideo.play().catch(e => console.log(e)); 
+            }
+            if(this.callbacks.onRemoteStream) this.callbacks.onRemoteStream();
         };
     }
 
     stop(notify = true) {
         if(notify && this.targetId) this.socket.emit('private_call_hangup', { targetId: this.targetId });
-        if(this.pc) this.pc.close();
+        if(this.pc) { this.pc.close(); this.pc = null; }
         if(this.localStream) this.localStream.getTracks().forEach(t => t.stop());
+        if(this.localVideo) this.localVideo.srcObject = null;
         if(this.remoteVideo) this.remoteVideo.srcObject = null;
+        this.localStream = null;
         this.targetId = null;
         if(this.callbacks.onHangup) this.callbacks.onHangup();
     }

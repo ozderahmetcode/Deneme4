@@ -265,6 +265,7 @@ class TetrisGame {
     }
 
     initControls() {
+        // Klavye kontrolleri
         document.addEventListener('keydown', e => {
             if (this.isGameOver) return;
             if (e.key === 'ArrowLeft') this.move(-1);
@@ -272,6 +273,43 @@ class TetrisGame {
             if (e.key === 'ArrowDown') this.drop();
             if (e.key === 'ArrowUp') this.rotate();
         });
+
+        // Mobil Touch Kontrolleri (Swipe)
+        let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+        const minSwipe = 30; // Minimum swipe mesafesi (px)
+
+        this.canvas.addEventListener('touchstart', (e) => {
+            if (this.isGameOver) return;
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            touchStartTime = Date.now();
+            e.preventDefault();
+        }, { passive: false });
+
+        this.canvas.addEventListener('touchend', (e) => {
+            if (this.isGameOver) return;
+            const touch = e.changedTouches[0];
+            const dx = touch.clientX - touchStartX;
+            const dy = touch.clientY - touchStartY;
+            const dt = Date.now() - touchStartTime;
+
+            // Hızlı dokunma = döndür
+            if (Math.abs(dx) < minSwipe && Math.abs(dy) < minSwipe && dt < 200) {
+                this.rotate();
+                return;
+            }
+
+            // Yatay kaydırma → sola/sağa
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > minSwipe) {
+                this.move(dx > 0 ? 1 : -1);
+            }
+            // Dikey kaydırma aşağı → hızlı düşür
+            else if (dy > minSwipe) {
+                this.drop();
+            }
+            e.preventDefault();
+        }, { passive: false });
     }
 
     update(time = 0) {
