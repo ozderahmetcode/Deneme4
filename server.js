@@ -163,6 +163,9 @@ setInterval(() => {
     }
 }, 15 * 60000); // 15 dakikada bir temizle
 
+// Madde 3: Arkadaşlık İstekleri Yetkilendirme Map'i (targetUserId -> Set of requesterUserIds)
+const pendingFriendRequests = new Map();
+
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     
@@ -570,12 +573,22 @@ io.on('connection', (socket) => {
         
         // Güvenlik: Gönderen bilgileri istemciden değil, doğrulanmış Token'dan alınır
         const decodedUser = socket.decoded;
+        const targetSocket = io.sockets.sockets.get(data.targetId);
         
-        io.to(data.targetId).emit('friend_request_received', {
-            senderId: socket.id,
-            senderName: decodedUser.username,
-            senderAvatar: decodedUser.avatarUrl || ''
-        });
+        if (targetSocket && targetSocket.decoded) {
+            const targetUserId = targetSocket.decoded.id;
+            if (!pendingFriendRequests.has(targetUserId)) {
+                pendingFriendRequests.set(targetUserId, new Set());
+            }
+            pendingFriendRequests.get(targetUserId).add(decodedUser.id);
+            
+            io.to(data.targetId).emit('friend_request_received', {
+                senderId: socket.id,
+                senderUserId: decodedUser.id, // DB ID eklendi (Aşama 24)
+                senderName: decodedUser.username,
+                senderAvatar: decodedUser.avatarUrl || ''
+            });
+        }
     });
 
     socket.on('update_preference', async (data) => {
@@ -612,16 +625,24 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- FRIEND SYSTEM PERSISTENCE (Madde 23) ---
+    // --- FRIEND SYSTEM PERSISTENCE (Madde 23 & 3 Fix) ---
     socket.on('accept_friend_request', async (data) => {
         if (!checkRateLimit(socket)) return;
-        if (!data || !data.friendId) return;
+        if (!data || !data.friendUserId) return; // friendId -> friendUserId (Aşama 24)
         
         const decodedUser = socket.decoded;
         if (decodedUser) {
+            // Madde 3: Yetkilendirme Kontrolü (Handshake Verification)
+            const myPendingRequests = pendingFriendRequests.get(decodedUser.id);
+            if (!myPendingRequests || !myPendingRequests.has(data.friendUserId)) {
+                console.warn(`🚨 [Security] Yetkisiz Arkadaşlık Kabul Denemesi: ${decodedUser.username} -> ${data.friendUserId}`);
+                return;
+            }
+
             try {
-                await UserRepository.addFriend(decodedUser.id, data.friendId);
-                console.log(`🤝 [Social] Arkadaşlık kuruldu: ${decodedUser.username} <-> ${data.friendId}`);
+                await UserRepository.addFriend(decodedUser.id, data.friendUserId);
+                myPendingRequests.delete(data.friendUserId); // İstek işlendi, temizle
+                console.log(`🤝 [Social] Arkadaşlık doğrulandı ve kuruldu: ${decodedUser.username} <-> ${data.friendUserId}`);
             } catch (e) {
                 console.error("Add friend error:", e);
             }
