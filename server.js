@@ -104,6 +104,12 @@ function verifyPassword(password, storedHash) {
     return crypto.timingSafeEqual(Buffer.from(key, 'hex'), Buffer.from(hash, 'hex'));
 }
 
+// UUID Doğrulama (PostgreSQL format hatalarını önlemek için)
+function isValidUUID(uuid) {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return regex.test(uuid);
+}
+
 app.post('/api/auth/register', async (req, res) => {
     const { username, password, age, gender, region } = req.body;
     
@@ -614,6 +620,12 @@ io.on('connection', (socket) => {
         
         const decodedUser = socket.decoded;
         if (decodedUser) {
+            // Madde 4 Fix: UUID Format Kontrolü (Postgres Crash Prevention)
+            if (!isValidUUID(data.reportedId)) {
+                console.warn(`🚨 [Security] Geçersiz UUID ile rapor denemesi: ${data.reportedId}`);
+                return;
+            }
+
             try {
                 // Madde 2 DoS Fix: submitReport -> reportUser (database.js ile uyumlu hale getirildi)
                 await UserRepository.reportUser(decodedUser.id, data.reportedId, data.reason);
@@ -628,7 +640,8 @@ io.on('connection', (socket) => {
     // --- FRIEND SYSTEM PERSISTENCE (Madde 23 & 3 Fix) ---
     socket.on('accept_friend_request', async (data) => {
         if (!checkRateLimit(socket)) return;
-        if (!data || !data.friendUserId) return; // friendId -> friendUserId (Aşama 24)
+        // Madde 4 Fix: friendId -> friendUserId ve UUID Kontrolü
+        if (!data || !data.friendUserId || !isValidUUID(data.friendUserId)) return; 
         
         const decodedUser = socket.decoded;
         if (decodedUser) {
