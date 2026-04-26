@@ -222,7 +222,14 @@ const UserRepository = {
         if (!isDBConnected) return;
         // Madde 16: Kullanıcı tercihini bölge alanında veya özel bir kolonda sakla
         await pool.query('UPDATE users SET region = $1 WHERE id = $2', [preference, userId]);
+    },
+    async submitReport(reporterId, reportedId, reason) {
+        if (!isDBConnected) return;
+        await pool.query(
+            'INSERT INTO reports (reporter_id, reported_id, reason) VALUES ($1, $2, $3)',
+            [reporterId, reportedId, reason]
+        );
     }
 };
 
-module.exports = { pool, initDB, UserRepository };
+module.exports = { initDB, UserRepository, pool };

@@ -27,14 +27,31 @@ const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : (process.env.NODE_ENV === 'production' ? false : '*');
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',') 
+    : (process.env.NODE_ENV === 'production' ? ['https://ozderahmetcode.github.io'] : ['*']); // Madde 18: Prod için varsayılan domain ekle
 
 const app = express();
 app.set('trust proxy', 1); // Render/Heroku arkasındaki gerçek IP'yi tanı (Madde 12)
 const server = http.createServer(app);
 
 // Güvenlik Middleware'leri
-app.use(helmet({ contentSecurityPolicy: false })); // CSP meta tag index.html'de yönetiliyor
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.socket.io", "https://cdn.jsdelivr.net"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+            imgSrc: ["'self'", "data:", "https://api.dicebear.com", "https://assets.mixkit.co"],
+            connectSrc: ["'self'", "wss:", "https:", "https://cdn.socket.io"],
+            frameAncestors: ["'none'"], // Madde 17: Clickjacking Koruması
+            objectSrc: ["'none'"],
+            upgradeInsecureRequests: [],
+        },
+    },
+    xFrameOptions: { action: "deny" }
+}));
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true })); // Sıkılaştırılmış CORS politikası
 
 // HTTP Rate Limit (Brute-force koruması)
@@ -413,9 +430,6 @@ io.on('connection', (socket) => {
     const matchLocks = {}; // Matchmaker için kilit (Top-level yerine socket içinde kalabilir çünkü handleFindMatch kendi kilidini yönetir)
     
     socket.on('find_match', async (data) => {
-        // Madde 15: update_preference için whitelist (Eğer ayrı socket ise)
-        // (Bu kısım handleFindMatch içinde zaten doğrulanıyor olabilir)
-        const result = await MatchmakerService.handleFindMatch(socket, data);
         if (!checkRateLimit(socket)) {
             socket.emit('rate_limited', { msg: 'Çok hızlı istek gönderiyorsunuz. Lütfen bekleyin.' });
             return;
@@ -575,6 +589,23 @@ io.on('connection', (socket) => {
                 console.log(`⚙️ Tercih güncellendi ve kaydedildi: ${decodedUser.username} → ${data.matchPref}`);
             } catch (e) {
                 console.error("Preference update error:", e);
+            }
+        }
+    });
+
+    // --- REPORTING SYSTEM (Madde 20) ---
+    socket.on('submit_report', async (data) => {
+        if (!checkRateLimit(socket)) return;
+        if (!data || !data.reportedId || !data.reason) return;
+        
+        const decodedUser = socket.decoded;
+        if (decodedUser) {
+            try {
+                await UserRepository.submitReport(decodedUser.id, data.reportedId, data.reason);
+                console.log(`🚨 [Report] ${decodedUser.username} rapor gönderdi: -> ${data.reportedId}`);
+                socket.emit('report_success', { msg: 'Raporunuz başarıyla iletildi. İnceleme başlatılacaktır.' });
+            } catch (e) {
+                console.error("Report submission error:", e);
             }
         }
     });
