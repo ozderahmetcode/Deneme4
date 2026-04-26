@@ -13,7 +13,7 @@ function setupSignaling(io) {
         /**
          * Socket'e tüm WebRTC sinyal eventlerini bağla
          */
-        attachToSocket(socket) {
+        attachToSocket(socket, io, checkRateLimit) {
             // --- 1-ON-1 WEBRTC SIGNALING ---
             socket.on("webrtc_offer", (p) => {
                 if (!p || !p.targetId) return;

@@ -411,7 +411,7 @@ io.on('connection', (socket) => {
     console.log('📱 Bağlandı:', socket.id);
 
     // --- Attach all signaling events from module ---
-    signaling.attachToSocket(socket, io); // io eklendi (Madde 11 için)
+    signaling.attachToSocket(socket, io, checkRateLimit);
 
     // --- Initial data push ---
     socket.emit('receive_rooms_info', getRoomsData());
