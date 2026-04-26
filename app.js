@@ -19,6 +19,19 @@ function isValidUrl(url) {
     }
 }
 
+function isValidMediaFormat(dataUri, type) {
+    if (!dataUri || typeof dataUri !== 'string') return false;
+    if (type === 'image') {
+        return dataUri.startsWith('data:image/jpeg') || 
+               dataUri.startsWith('data:image/png') || 
+               dataUri.startsWith('data:image/webp');
+    }
+    if (type === 'audio') {
+        return dataUri.startsWith('data:audio/');
+    }
+    return false;
+}
+
 // ---- GLOBAL PLAYER & DATA (File-level access) ----
 const radioPlayer = new Audio();
 radioPlayer.volume = 0.5;
@@ -2014,6 +2027,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onloadend = () => {
+                    // Madde 5: Kendi mesajına format-check uygula (SVG engelle)
+                    if (!isValidMediaFormat(reader.result, 'image')) {
+                        console.warn("🚫 Geçersiz görsel formatı engellendi.");
+                        return;
+                    }
                     const container = document.getElementById('chat-messages-container');
                     const label = ephemeral ? '<div style="font-size:0.6rem; color:#ff7675; margin-bottom:3px;">🔒 Tek Kullanımlık</div>' : '';
                     container.innerHTML += `<div class="chat-bubble me">${label}<img src="${reader.result}" style="max-width:200px; border-radius:10px;"></div>`;
