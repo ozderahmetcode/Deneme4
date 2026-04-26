@@ -86,8 +86,14 @@ app.post('/api/auth/register', async (req, res) => {
     // Güvenlik: Username sadece harf, rakam ve alt tire içerebilir. Max 20 karakter.
     const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
 
-    if (!username || !password || !usernameRegex.test(username) || password.length < 6) {
-        return res.status(400).json({ success: false, error: "Geçersiz kullanıcı adı (3-20 karakter, harf/rakam) veya şifre (min 6)" });
+    // Madde 18: Şifre Politikası (Min 8 Karakter, Harf ve Rakam Zorunlu)
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+
+    if (!username || !password || !usernameRegex.test(username) || !passwordRegex.test(password)) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Geçersiz kullanıcı adı (3-20 karakter) veya zayıf şifre (Min 8 karakter, en az bir harf ve bir rakam içermelidir)" 
+        });
     }
 
     try {
@@ -120,6 +126,8 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
+const loginAttempts = new Map(); // username → { count, lockUntil }
+
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     
@@ -127,15 +135,27 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(400).json({ success: false, error: "Kullanıcı adı ve şifre gereklidir." });
     }
 
+    // Madde 19: Hesap Bazlı Brute-Force Koruması
+    const attempt = loginAttempts.get(username) || { count: 0, lockUntil: 0 };
+    if (Date.now() < attempt.lockUntil) {
+        const remainingMin = Math.ceil((attempt.lockUntil - Date.now()) / 60000);
+        return res.status(429).json({ success: false, error: `Çok fazla başarısız deneme. Lütfen ${remainingMin} dakika bekleyin.` });
+    }
+
     try {
         const user = await UserRepository.getUserByUsername(username);
-        if (!user || !user.password_hash) {
+        if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
+            attempt.count++;
+            if (attempt.count >= 5) {
+                attempt.lockUntil = Date.now() + 5 * 60000; // 5 dakika kilit
+                attempt.count = 0;
+            }
+            loginAttempts.set(username, attempt);
             return res.status(401).json({ success: false, error: "Hatalı kullanıcı adı veya şifre." });
         }
 
-        if (!verifyPassword(password, user.password_hash)) {
-            return res.status(401).json({ success: false, error: "Hatalı kullanıcı adı veya şifre." });
-        }
+        // Başarılı giriş: Denemeleri sıfırla
+        loginAttempts.delete(username);
 
         const userPayload = { 
             id: user.id,
@@ -511,9 +531,17 @@ io.on('connection', (socket) => {
         });
     });
 
-    socket.on('update_preference', (data) => {
-        // Preference güncellemesi (isteğe bağlı sunucu tarafı kayıt)
-        console.log(`⚙️ Tercih güncellendi: ${socket.id} → ${data.matchPref}`);
+    socket.on('update_preference', async (data) => {
+        // Madde 16: Tercihleri veritabanına kaydet (Kalıcı hale getir)
+        const decodedUser = socket.decoded;
+        if (decodedUser && data.matchPref) {
+            try {
+                await UserRepository.updateUserPreference(decodedUser.id, data.matchPref);
+                console.log(`⚙️ Tercih güncellendi ve kaydedildi: ${decodedUser.username} → ${data.matchPref}`);
+            } catch (e) {
+                console.error("Preference update error:", e);
+            }
+        }
     });
 
     // --- DISCONNECT ---
