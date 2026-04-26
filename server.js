@@ -27,6 +27,8 @@ const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : (process.env.NODE_ENV === 'production' ? false : '*');
+
 const app = express();
 app.set('trust proxy', 1); // Render/Heroku arkasındaki gerçek IP'yi tanı (Madde 12)
 const server = http.createServer(app);
@@ -41,10 +43,13 @@ const limiter = rateLimit({
     max: 100, // IP başına limit
     standardHeaders: true,
     legacyHeaders: false,
+    handler: (req, res, next, options) => {
+        console.warn(`🚨 [Audit] HTTP Rate Limit İhlali: ${req.ip} -> ${req.originalUrl}`);
+        res.status(options.statusCode).send(options.message);
+    }
 });
 app.use('/api/', limiter);
 
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : (process.env.NODE_ENV === 'production' ? false : '*');
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -146,8 +151,10 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const user = await UserRepository.getUserByUsername(username);
         if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
+            console.warn(`🚨 [Audit] Başarısız Giriş Denemesi: ${username} (IP: ${req.ip})`);
             attempt.count++;
             if (attempt.count >= 5) {
+                console.warn(`🚨 [Audit] Hesap Kilitlendi: ${username} (Brute-force şüphesi)`);
                 attempt.lockUntil = Date.now() + 5 * 60000; // 5 dakika kilit
                 attempt.count = 0;
             }
@@ -214,6 +221,9 @@ function checkRateLimit(socket) {
     }
     
     entry.count++;
+    if (entry.count > RATE_LIMIT.maxRequests) {
+        console.warn(`🚨 [Audit] Socket Rate Limit İhlali: ${userId} (IP: ${clientIp})`);
+    }
     return entry.count <= RATE_LIMIT.maxRequests;
 }
 

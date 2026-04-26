@@ -18,12 +18,16 @@ const connectionConfig = process.env.DATABASE_URL
         ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_STRICT === 'true' } : false
       }
     : {
-        user: process.env.DB_USER || 'postgres',
-        host: process.env.DB_HOST || 'localhost',
-        database: process.env.DB_NAME || 'ozder_db',
-        password: process.env.DB_PASS || '123456',
+        user: process.env.DB_USER,
+        host: process.env.DB_HOST,
+        database: process.env.DB_NAME,
+        password: process.env.DB_PASS,
         port: process.env.DB_PORT || 5432,
       };
+
+if (!isProduction && !process.env.DATABASE_URL && !process.env.DB_PASS) {
+    console.warn("⚠️ [Güvenlik] DB_PASS eksik. Veritabanı bağlantısı kurulamayabilir.");
+}
 
 const pool = new Pool({
     ...connectionConfig,
