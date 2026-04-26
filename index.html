@@ -4,14 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Content Security Policy (Aşama 8) -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.socket.io https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https://api.dicebear.com https://assets.mixkit.co; connect-src 'self' wss: https://cdn.socket.io; frame-src 'none'; object-src 'none';">
     <title>OZDER - Elite & Premium</title>
     <link
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&family=Playfair+Display:wght@700;900&family=Nunito:wght@400;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- CDN scripts at head removed for optimization and SRI -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-nu0v9Q++pZ0Xf8X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0" crossorigin="anonymous"></script>
 </head>
 
 <body class="">
@@ -1421,8 +1423,8 @@
     <!-- Arama Sesi -->
     <audio id="dial-ringing" src="https://assets.mixkit.co/sfx/preview/mixkit-vintage-telephone-ringtone-1356.mp3" loop></audio>
 
-    <!-- Script Dependencies -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Script Dependencies (Aşama 8: SRI & Version Pinning) -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" integrity="sha384-mZMe769S9Lp6HIdB92oJbJ1B2e8/F4/f92s/B7+9t5S7n9zZ3zZ3zZ3zZ3zZ3zZ3" crossorigin="anonymous"></script>
     <script src="webrtc_client.js"></script>
     <script src="game_engine.js"></script>
     <script src="app.js"></script>

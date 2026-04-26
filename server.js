@@ -31,7 +31,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Güvenlik Middleware'leri
-app.use(helmet()); // Güvenlik başlıkları (HSTS dahil)
+app.use(helmet({ contentSecurityPolicy: false })); // CSP meta tag index.html'de yönetiliyor
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true })); // Sıkılaştırılmış CORS politikası
 
 // HTTP Rate Limit (Brute-force koruması)
