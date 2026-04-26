@@ -99,7 +99,8 @@ function hashPassword(password) {
 function verifyPassword(password, storedHash) {
     const [salt, key] = storedHash.split(':');
     const hash = crypto.pbkdf2Sync(password, salt, 210000, 64, 'sha512').toString('hex');
-    return key === hash;
+    // Madde 24: Timing Safe Comparison (Siber Saldırı Koruması)
+    return crypto.timingSafeEqual(Buffer.from(key, 'hex'), Buffer.from(hash, 'hex'));
 }
 
 app.post('/api/auth/register', async (req, res) => {
@@ -606,6 +607,22 @@ io.on('connection', (socket) => {
                 socket.emit('report_success', { msg: 'Raporunuz başarıyla iletildi. İnceleme başlatılacaktır.' });
             } catch (e) {
                 console.error("Report submission error:", e);
+            }
+        }
+    });
+
+    // --- FRIEND SYSTEM PERSISTENCE (Madde 23) ---
+    socket.on('accept_friend_request', async (data) => {
+        if (!checkRateLimit(socket)) return;
+        if (!data || !data.friendId) return;
+        
+        const decodedUser = socket.decoded;
+        if (decodedUser) {
+            try {
+                await UserRepository.addFriend(decodedUser.id, data.friendId);
+                console.log(`🤝 [Social] Arkadaşlık kuruldu: ${decodedUser.username} <-> ${data.friendId}`);
+            } catch (e) {
+                console.error("Add friend error:", e);
             }
         }
     });

@@ -50,6 +50,9 @@ const MatchmakerService = {
             const { user1, user2 } = matchResult;
             const iceBreaker = "En son ne zaman gerçekten mutlu hissettin?";
 
+            // Madde 21: Ödül
+            try { UserRepository.recordMatch(user1.userId, user2.userId, 0); } catch(e){}
+
             // User 1'e haber ver
             socket.emit('match_found', {
                 opponentId: user2.socketId,

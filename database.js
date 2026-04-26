@@ -191,25 +191,28 @@ const UserRepository = {
         return res.rows[0];
     },
 
-    async recordMatch(user1Id, user2Id, durationSeconds) {
+    async recordMatch(user1Id, user2Id, durationSeconds = 0) {
         if (!isDBConnected) return;
         await pool.query(
             'INSERT INTO matches (user1_id, user2_id, duration_seconds) VALUES ($1, $2, $3)',
             [user1Id, user2Id, durationSeconds]
         );
-        // Madde 10: Başarılı eşleşme ödülü (Sunucu tarafı güvenli gold kazanımı)
+        // Madde 21: Başarılı eşleşme ödülü (5 Gold)
         await this.updateGoldBalance(user1Id, 5, 'Match Reward');
         await this.updateGoldBalance(user2Id, 5, 'Match Reward');
     },
-
     async addFriend(userId, friendId) {
         if (!isDBConnected) return;
         await pool.query(
             'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
             [userId, friendId, 'accepted']
         );
+        // Karşılıklı ekleme
+        await pool.query(
+            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+            [friendId, userId, 'accepted']
+        );
     },
-
     async reportUser(reporterId, reportedId, reason) {
         if (!isDBConnected) return;
         await pool.query(
@@ -217,18 +220,10 @@ const UserRepository = {
             [reporterId, reportedId, reason]
         );
     },
-
     async updateUserPreference(userId, preference) {
         if (!isDBConnected) return;
         // Madde 16: Kullanıcı tercihini bölge alanında veya özel bir kolonda sakla
         await pool.query('UPDATE users SET region = $1 WHERE id = $2', [preference, userId]);
-    },
-    async submitReport(reporterId, reportedId, reason) {
-        if (!isDBConnected) return;
-        await pool.query(
-            'INSERT INTO reports (reporter_id, reported_id, reason) VALUES ($1, $2, $3)',
-            [reporterId, reportedId, reason]
-        );
     }
 };
 
