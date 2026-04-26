@@ -38,19 +38,27 @@ function setupSignaling(io) {
                 io.to(p.targetId).emit('peer_disconnected', { msg: 'Disconnected' });
             });
 
-            // --- ROOM WEBRTC SIGNALING (Isolated namespace) ---
+            // --- ROOM WEBRTC SIGNALING (Madde 11: Common Room Check) ---
+            const checkCommonRoom = (targetId) => {
+                const targetSocket = io.sockets.sockets.get(targetId);
+                if (!targetSocket) return false;
+                // Her iki socket'in ortak bir odada (room_*) olup olmadığını kontrol et
+                const myRooms = Array.from(socket.rooms).filter(r => r.startsWith('room_'));
+                return myRooms.some(r => targetSocket.rooms.has(r));
+            };
+
             socket.on("room_webrtc_offer", (p) => {
-                if (!p || !p.targetId) return;
+                if (!p || !p.targetId || !checkCommonRoom(p.targetId)) return;
                 io.to(p.targetId).emit("room_webrtc_offer", { senderId: socket.id, sdp: p.sdp });
             });
 
             socket.on("room_webrtc_answer", (p) => {
-                if (!p || !p.targetId) return;
+                if (!p || !p.targetId || !checkCommonRoom(p.targetId)) return;
                 io.to(p.targetId).emit("room_webrtc_answer", { senderId: socket.id, sdp: p.sdp });
             });
 
             socket.on("room_webrtc_ice_candidate", (p) => {
-                if (!p || !p.targetId) return;
+                if (!p || !p.targetId || !checkCommonRoom(p.targetId)) return;
                 io.to(p.targetId).emit("room_webrtc_ice_candidate", { senderId: socket.id, candidate: p.candidate });
             });
 
@@ -106,13 +114,14 @@ function setupSignaling(io) {
                 if (!data || !data.targetId) return;
                 if (data.targetId !== socket.matchedPeerId) return;
                 io.to(data.targetId).emit('private_call_finished', { senderId: socket.id });
+                if (socket.matchedPeerId === data.targetId) socket.matchedPeerId = null;
             });
 
             // --- GAME SIGNALING ---
             socket.on('game_move', (p) => {
                 if (!p || !p.targetId) return;
                 if (p.targetId !== socket.matchedPeerId) return;
-                io.to(p.targetId).emit('game_move', { senderId: socket.id, moveData: p.moveData });
+                io.to(p.targetId).emit('game_move', { senderId: socket.id, move: p.moveData });
             });
 
             socket.on('game_score', (p) => {
@@ -156,9 +165,11 @@ function setupSignaling(io) {
                 });
             });
 
-            // --- MIC STATUS ---
+            // --- MIC STATUS (Madde 10: Peer Check) ---
             socket.on('mic_status_change', (data) => {
                 if (!data || !data.targetId) return;
+                // Güvenlik: Sadece eşleşmiş peer'a mikrofon durumunu ilet
+                if (data.targetId !== socket.matchedPeerId) return;
                 io.to(data.targetId).emit('mic_status_change', { senderId: socket.id, isMuted: data.isMuted });
             });
         }

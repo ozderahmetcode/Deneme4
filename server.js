@@ -134,6 +134,16 @@ app.post('/api/auth/register', async (req, res) => {
 
 const loginAttempts = new Map(); // username → { count, lockUntil }
 
+// Madde 12: Memory Leak Koruması (Periyodik Temizlik)
+setInterval(() => {
+    const now = Date.now();
+    for (const [user, attempt] of loginAttempts) {
+        if (now > attempt.lockUntil && attempt.count === 0) {
+            loginAttempts.delete(user);
+        }
+    }
+}, 15 * 60000); // 15 dakikada bir temizle
+
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     
@@ -376,11 +386,14 @@ function leaveRoom(sock, roomId) {
 const signaling = setupSignaling(io);
 
 // ==================== SOCKET LOGIC ====================
+// Madde 13: Game Match Locks modül scope'una taşındı (Race Condition Koruması)
+const gameMatchLocks = {};
+
 io.on('connection', (socket) => {
     console.log('📱 Bağlandı:', socket.id);
 
     // --- Attach all signaling events from module ---
-    signaling.attachToSocket(socket);
+    signaling.attachToSocket(socket, io); // io eklendi (Madde 11 için)
 
     // --- Initial data push ---
     socket.emit('receive_rooms_info', getRoomsData());
@@ -397,7 +410,12 @@ io.on('connection', (socket) => {
     });
 
     // --- SMART MATCHING (MatchmakerService entegrasyonu) ---
+    const matchLocks = {}; // Matchmaker için kilit (Top-level yerine socket içinde kalabilir çünkü handleFindMatch kendi kilidini yönetir)
+    
     socket.on('find_match', async (data) => {
+        // Madde 15: update_preference için whitelist (Eğer ayrı socket ise)
+        // (Bu kısım handleFindMatch içinde zaten doğrulanıyor olabilir)
+        const result = await MatchmakerService.handleFindMatch(socket, data);
         if (!checkRateLimit(socket)) {
             socket.emit('rate_limited', { msg: 'Çok hızlı istek gönderiyorsunuz. Lütfen bekleyin.' });
             return;
@@ -422,8 +440,6 @@ io.on('connection', (socket) => {
     });
 
     // --- GAME MATCHMAKING ---
-    const gameMatchLocks = {};
-
     socket.on('find_game_match', (data) => {
         if (!checkRateLimit(socket)) return;
 
@@ -548,9 +564,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('update_preference', async (data) => {
-        // Madde 16: Tercihleri veritabanına kaydet (Kalıcı hale getir)
+        // Madde 15 & 16: Whitelist ve Input Validation
+        const validPrefs = ['mixed', 'same_gender', 'same_region'];
+        if (!data || !validPrefs.includes(data.matchPref)) return;
+        
         const decodedUser = socket.decoded;
-        if (decodedUser && data.matchPref) {
+        if (decodedUser) {
             try {
                 await UserRepository.updateUserPreference(decodedUser.id, data.matchPref);
                 console.log(`⚙️ Tercih güncellendi ve kaydedildi: ${decodedUser.username} → ${data.matchPref}`);
