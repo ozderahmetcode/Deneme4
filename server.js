@@ -574,27 +574,36 @@ io.on('connection', (socket) => {
         if (!checkRateLimit(socket)) return;
         if (!data || !data.targetId) return;
         
-        // Kendine istek atmayı engelle
-        if (data.targetId === socket.id) return;
-        
-        // Güvenlik: Gönderen bilgileri istemciden değil, doğrulanmış Token'dan alınır
-        const decodedUser = socket.decoded;
+        // Kendine istek atmayı engelle (Aynı socket veya aynı kullanıcı - farklı tab)
         const targetSocket = io.sockets.sockets.get(data.targetId);
+        if (!targetSocket || !targetSocket.decoded) return;
         
-        if (targetSocket && targetSocket.decoded) {
-            const targetUserId = targetSocket.decoded.id;
-            if (!pendingFriendRequests.has(targetUserId)) {
-                pendingFriendRequests.set(targetUserId, new Set());
-            }
-            pendingFriendRequests.get(targetUserId).add(decodedUser.id);
-            
-            io.to(data.targetId).emit('friend_request_received', {
-                senderId: socket.id,
-                senderUserId: decodedUser.id, // DB ID eklendi (Aşama 24)
-                senderName: decodedUser.username,
-                senderAvatar: decodedUser.avatarUrl || ''
-            });
+        const decodedUser = socket.decoded;
+        const targetUserId = targetSocket.decoded.id;
+        
+        if (targetUserId === decodedUser.id) {
+            console.warn(`🚨 [Security] Kendine arkadaşlık isteği engellendi: ${decodedUser.username}`);
+            return;
         }
+
+        // Spam Koruması: Zaten bekleyen bir istek var mı?
+        const targetPending = pendingFriendRequests.get(targetUserId);
+        if (targetPending && targetPending.has(decodedUser.id)) {
+            socket.emit('friend_error', { msg: 'Bu kullanıcıya zaten bir isteğiniz bulunuyor.' });
+            return;
+        }
+        
+        if (!pendingFriendRequests.has(targetUserId)) {
+            pendingFriendRequests.set(targetUserId, new Set());
+        }
+        pendingFriendRequests.get(targetUserId).add(decodedUser.id);
+        
+        io.to(data.targetId).emit('friend_request_received', {
+            senderId: socket.id,
+            senderUserId: decodedUser.id,
+            senderName: decodedUser.username,
+            senderAvatar: decodedUser.avatarUrl || ''
+        });
     });
 
     socket.on('update_preference', async (data) => {
