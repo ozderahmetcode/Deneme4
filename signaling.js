@@ -111,9 +111,19 @@ function setupSignaling(io) {
                     return;
                 }
 
-                // Madde 4: Photo/Audio için spesifik dize limitleri (Örn. 500KB)
-                if (data.photoData && data.photoData.length > 700000) return; // Base64 ~500KB
-                if (data.audioData && data.audioData.length > 700000) return;
+                // Madde 4 & 14: Photo/Audio için spesifik dize limitleri ve format doğrulaması
+                if (data.photoData) {
+                    if (data.photoData.length > 700000) return; 
+                    // SVG XSS ve beacon koruması: Sadece güvenli görsel formatları
+                    if (!data.photoData.startsWith('data:image/jpeg') && 
+                        !data.photoData.startsWith('data:image/png') && 
+                        !data.photoData.startsWith('data:image/webp')) return;
+                }
+                
+                if (data.audioData) {
+                    if (data.audioData.length > 700000) return;
+                    if (!data.audioData.startsWith('data:audio/')) return;
+                }
 
                 io.to(data.targetId).emit('receive_message', {
                     text: data.text ? String(data.text).substring(0, 1000) : '',

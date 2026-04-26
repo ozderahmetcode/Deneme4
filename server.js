@@ -28,6 +28,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+app.set('trust proxy', 1); // Render/Heroku arkasındaki gerçek IP'yi tanı (Madde 12)
 const server = http.createServer(app);
 
 // Güvenlik Middleware'leri
@@ -178,13 +179,16 @@ const RATE_LIMIT = { maxRequests: 30, windowMs: 10000 }; // 30 istek / 10 saniye
 
 function checkRateLimit(socket) {
     const now = Date.now();
-    // Güvenlik: Socket.id yerine gerçek İstemci IP adresi kullanılır
-    const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address || socket.id;
-    let entry = rateLimitMap.get(clientIp);
+    // Güvenlik: Proxy güveni sonrası gerçek IP ve Kullanıcı ID birleşimi (Madde 13)
+    const clientIp = socket.handshake.address; 
+    const userId = socket.decoded ? socket.decoded.id : 'anon';
+    const limitKey = `${userId}_${clientIp}`;
+    
+    let entry = rateLimitMap.get(limitKey);
     
     if (!entry || now > entry.resetTime) {
         entry = { count: 0, resetTime: now + RATE_LIMIT.windowMs };
-        rateLimitMap.set(clientIp, entry);
+        rateLimitMap.set(limitKey, entry);
     }
     
     entry.count++;
