@@ -178,6 +178,12 @@ const UserRepository = {
         return res.rows[0];
     },
 
+    async getUserByUsername(username) {
+        if (!isDBConnected) return null;
+        const res = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        return res.rows[0];
+    },
+
     async recordMatch(user1Id, user2Id, durationSeconds) {
         if (!isDBConnected) return;
         await pool.query(

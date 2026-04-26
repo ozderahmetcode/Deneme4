@@ -16,17 +16,24 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 // --- Modül İmportları ---
 const setupSignaling = require('./signaling');
 const MatchmakerService = require('./matchmaker_service_');
-const { pool, initDB } = require('./database');
+const { pool, initDB, UserRepository } = require('./database');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ozder_default_secret';
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : (process.env.NODE_ENV === 'production' ? false : '*');
+const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error("❌ KRİTİK HATA: JWT_SECRET ortam değişkeni bulunamadı. Sunucu güvenliği için başlatılmıyor.");
+    process.exit(1);
+}
 
 app.use(express.static('./'));
 app.use(express.json());
@@ -42,15 +49,84 @@ app.get('/health', (req, res) => {
 });
 
 // ==================== AUTHENTICATION (JWT) ====================
-app.post('/api/auth/register', (req, res) => {
-    const { username, age, gender, region } = req.body;
-    const userPayload = { 
-        id: `user_${Math.random().toString(36).substr(2, 9)}`,
-        username, age, gender, region 
-    };
+// Şifre Hashleme Yardımcıları
+function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+    const [salt, key] = storedHash.split(':');
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return key === hash;
+}
+
+app.post('/api/auth/register', async (req, res) => {
+    const { username, password, age, gender, region } = req.body;
     
-    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ success: true, token, user: userPayload });
+    if (!username || !password || username.length < 3 || password.length < 6) {
+        return res.status(400).json({ success: false, error: "Geçersiz kullanıcı adı veya şifre" });
+    }
+
+    try {
+        const existingUser = await UserRepository.getUserByUsername(username);
+        if (existingUser) {
+            return res.status(400).json({ success: false, error: "Bu kullanıcı adı zaten alınmış." });
+        }
+
+        const passwordHash = hashPassword(password);
+        const newUser = await UserRepository.createUser({
+            username,
+            password: passwordHash,
+            age: age || null,
+            gender: gender || null,
+            region: region || null,
+            avatarUrl: '',
+            zodiac: ''
+        });
+
+        const userPayload = { 
+            id: newUser.id,
+            username: newUser.username
+        };
+        
+        const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ success: true, token, user: userPayload });
+    } catch (err) {
+        console.error("Register error:", err);
+        res.status(500).json({ success: false, error: "Kayıt olurken bir hata oluştu." });
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+        return res.status(400).json({ success: false, error: "Kullanıcı adı ve şifre gereklidir." });
+    }
+
+    try {
+        const user = await UserRepository.getUserByUsername(username);
+        if (!user || !user.password_hash) {
+            return res.status(401).json({ success: false, error: "Hatalı kullanıcı adı veya şifre." });
+        }
+
+        if (!verifyPassword(password, user.password_hash)) {
+            return res.status(401).json({ success: false, error: "Hatalı kullanıcı adı veya şifre." });
+        }
+
+        const userPayload = { 
+            id: user.id,
+            username: user.username
+        };
+        
+        const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ success: true, token, user: userPayload });
+    } catch (err) {
+        console.error("Login error:", err);
+        res.status(500).json({ success: false, error: "Giriş yaparken bir hata oluştu." });
+    }
 });
 
 // Socket.io Middleware: Her bağlantıda Token kontrolü
@@ -267,8 +343,15 @@ io.on('connection', (socket) => {
         const def = roomDefs[roomId];
         if (!def) return;
 
-        // VIP check
-        const userGold = decodedUser.gold || 1000; 
+        // VIP check (Güvenli DB Sorgusu)
+        let userGold = 0;
+        try {
+            const dbUser = await UserRepository.getUserById(decodedUser.id);
+            if (dbUser) userGold = dbUser.gold_balance || 0;
+        } catch (e) {
+            console.error("Gold check error:", e);
+        }
+
         if (def.vip && userGold < 500) {
             socket.emit('room_vip_required');
             return;
