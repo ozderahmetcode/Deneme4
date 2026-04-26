@@ -602,7 +602,8 @@ io.on('connection', (socket) => {
         const decodedUser = socket.decoded;
         if (decodedUser) {
             try {
-                await UserRepository.submitReport(decodedUser.id, data.reportedId, data.reason);
+                // Madde 2 DoS Fix: submitReport -> reportUser (database.js ile uyumlu hale getirildi)
+                await UserRepository.reportUser(decodedUser.id, data.reportedId, data.reason);
                 console.log(`🚨 [Report] ${decodedUser.username} rapor gönderdi: -> ${data.reportedId}`);
                 socket.emit('report_success', { msg: 'Raporunuz başarıyla iletildi. İnceleme başlatılacaktır.' });
             } catch (e) {
