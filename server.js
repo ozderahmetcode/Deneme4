@@ -23,6 +23,13 @@ const setupSignaling = require('./signaling');
 const MatchmakerService = require('./matchmaker_service_');
 const { initDB, UserRepository } = require('./database');
 
+// --- GLOBAL STATE & SECURITY MAPS ---
+const rateLimitMap = new Map(); // Madde 16: clientIp -> { count, resetTime }
+const loginAttempts = new Map(); // Madde 17: IP_username -> { count, lockUntil, lastAttempt }
+const blacklistedTokens = new Map(); // Madde 17 & 73: Logout yapılan tokenlar (token -> expiresAt)
+const friendRequestSpamMap = new Map(); // Madde 10: senderId -> Map<targetUserId, timestamp>
+const pendingFriendRequests = new Map(); // Madde 3: In-memory handshake (Stateless fallback added)
+
 const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -44,8 +51,8 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
             imgSrc: ["'self'", "data:", "https://api.dicebear.com", "https://assets.mixkit.co"],
-            connectSrc: ["'self'", "wss:", "https:", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 14 Fix
-            mediaSrc: ["'self'", "blob:", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 25 Fix: data: kaldırıldı
+            connectSrc: ["'self'", "wss:", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 14 & 15 Fix: https: wildcard kaldırıldı
+            mediaSrc: ["'self'", "blob:", "data:", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 10 & 25 Fix: data: geri eklendi (DM Audio Uyumluluğu)
             frameAncestors: ["'none'"], // Madde 17: Clickjacking Koruması
             objectSrc: ["'none'"],
             upgradeInsecureRequests: [],
@@ -98,10 +105,22 @@ function hashPassword(password) {
 }
 
 function verifyPassword(password, storedHash) {
-    const [salt, key] = storedHash.split(':');
-    const hash = crypto.pbkdf2Sync(password, salt, 210000, 64, 'sha512').toString('hex');
-    // Madde 24: Timing Safe Comparison (Siber Saldırı Koruması)
-    return crypto.timingSafeEqual(Buffer.from(key, 'hex'), Buffer.from(hash, 'hex'));
+    try {
+        if (!storedHash || !storedHash.includes(':')) return false; // Madde 8 Fix: Format kontrolü
+        const [salt, key] = storedHash.split(':');
+        const hash = crypto.pbkdf2Sync(password, salt, 210000, 64, 'sha512').toString('hex');
+        
+        const keyBuffer = Buffer.from(key, 'hex');
+        const hashBuffer = Buffer.from(hash, 'hex');
+        
+        // Madde 8 Fix: timingSafeEqual farklı uzunluklarda throw eder
+        if (keyBuffer.length !== hashBuffer.length) return false;
+        
+        return crypto.timingSafeEqual(keyBuffer, hashBuffer);
+    } catch (e) {
+        console.error("🚨 [Security] Password verification error (Malformed hash?):", e.message);
+        return false;
+    }
 }
 
 // UUID Doğrulama (PostgreSQL format hatalarını önlemek için)
@@ -181,9 +200,6 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-const loginAttempts = new Map(); // IP_username → { count, lockUntil }
-const blacklistedTokens = new Set(); // Madde 17: Logout yapılan tokenlar
-const friendRequestSpamMap = new Map(); // Madde 10: senderId -> Set of targetUserIds (Per windowMs)
 
 // Madde 12: Memory Leak Koruması (Periyodik Temizlik)
 setInterval(() => {
@@ -194,8 +210,16 @@ setInterval(() => {
             loginAttempts.delete(user);
         }
     }
-    // Madde 10: Arkadaşlık spam havuzunu temizle
-    friendRequestSpamMap.clear();
+    // Madde 7 & 67 Fix: Arkadaşlık spam havuzunu akıllıca temizle (24 saatten eski kayıtlar)
+    const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);
+    for (const [senderId, targets] of friendRequestSpamMap) {
+        for (const [targetId, timestamp] of targets) {
+            if (timestamp < twentyFourHoursAgo) {
+                targets.delete(targetId);
+            }
+        }
+        if (targets.size === 0) friendRequestSpamMap.delete(senderId);
+    }
 
     // Madde 16 Fix: Rate Limit haritasını temizle (Memory Leak Prevention)
     const resetTime = now - (10 * 1000); // 10 saniyelik pencere
@@ -204,10 +228,28 @@ setInterval(() => {
             rateLimitMap.delete(key);
         }
     }
+    // Madde 17 & 73 Fix: Blacklist havuzunu temizle (Süresi dolan tokenları çıkar)
+    for (const [token, expiresAt] of blacklistedTokens) {
+        if (now > expiresAt) {
+            blacklistedTokens.delete(token);
+        }
+    }
+
+    // Madde 21 & 99 Fix: Yetkilendirme Map'ini temizle (Bellek Sızıntısı Koruması)
+    // Sadece şu an aktif bağlantısı olmayan kullanıcıları temizle
+    const connectedUserIds = new Set();
+    io.sockets.sockets.forEach(s => {
+        if (s.decoded) connectedUserIds.add(s.decoded.id);
+    });
+
+    for (const [userId, requesters] of pendingFriendRequests) {
+        if (!connectedUserIds.has(userId)) {
+            pendingFriendRequests.delete(userId);
+        }
+    }
 }, 15 * 60000); // 15 dakikada bir temizle
 
 // Madde 3: Arkadaşlık İstekleri Yetkilendirme Map'i (targetUserId -> Set of requesterUserIds)
-const pendingFriendRequests = new Map();
 
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
@@ -260,18 +302,18 @@ app.post('/api/auth/refresh', async (req, res) => {
     if (!refreshToken) return res.status(401).json({ success: false });
 
     try {
-        const userId = await UserRepository.verifyRefreshToken(refreshToken);
-        if (!userId) return res.status(403).json({ success: false, error: "Geçersiz veya süresi dolmuş refresh token." });
+        // Madde 11 Fix: Atomic Consumption (Verify + Delete in one step)
+        const userId = await UserRepository.consumeRefreshToken(refreshToken);
+        if (!userId) return res.status(403).json({ success: false, error: "Geçersiz, kullanılmış veya süresi dolmuş token." });
 
         const user = await UserRepository.getUserById(userId);
         if (!user || user.is_banned) return res.status(403).json({ success: false });
 
-        // Eski token'ı sil ve yeni set üret (Token Rotation)
-        await UserRepository.deleteRefreshToken(refreshToken);
+        // Yeni token seti üret
         const tokens = await generateTokens(user);
-        
         res.json({ success: true, ...tokens });
     } catch (err) {
+        console.error("Refresh error:", err);
         res.status(500).json({ success: false });
     }
 });
@@ -285,6 +327,7 @@ io.use((socket, next) => {
         if (err) return next(new Error("Authentication error: Invalid token"));
         
         // Madde 17: Blacklist kontrolü
+        // Madde 17 & 73 Fix: Blacklist kontrolü
         if (blacklistedTokens.has(token)) {
             return next(new Error("Authentication error: Token is revoked (logged out)"));
         }
@@ -298,6 +341,8 @@ io.use((socket, next) => {
             socket.decoded = decoded;
             // Madde 7 Fix: JWT'deki eski avatar yerine DB'den taze avatarı socket'e bağla
             socket.currentAvatar = dbUser.avatar_url || '';
+
+            socket.currentAvatar = dbUser.avatar_url || '';
             next();
         } catch (dbErr) {
             console.error("Token verification DB error:", dbErr);
@@ -307,7 +352,6 @@ io.use((socket, next) => {
 });
 
 // ==================== RATE LIMITING ====================
-const rateLimitMap = new Map(); // clientIp → { count, resetTime }
 const RATE_LIMIT = { maxRequests: 30, windowMs: 10000 }; // 30 istek / 10 saniye
 
 function checkRateLimit(socket) {
@@ -487,31 +531,34 @@ const gameMatchLocks = {};
 io.on('connection', (socket) => {
     console.log('📱 Bağlandı:', socket.id);
 
+    // Madde 7 & 12 & 65 Fix: Bekleyen Arkadaşlık İsteklerini Gönder (Timing & Offline Delivery)
+    if (socket.decoded) {
+        UserRepository.getPendingFriendRequests(socket.decoded.id).then(pendingReqs => {
+            if (pendingReqs && pendingReqs.length > 0) {
+                // Madde 6 Fix: DB (snake_case) formatını Client (camelCase) formatına eşle
+                const mappedReqs = pendingReqs.map(r => ({
+                    senderUserId: r.sender_id,
+                    senderName: sanitizeString(r.sender_name),
+                    senderAvatar: sanitizeString(r.sender_avatar || '')
+                }));
+                socket.emit('pending_friend_requests', mappedReqs);
+
+                // Sunucu tarafındaki yetkilendirme Map'ine de ekle
+                if (!pendingFriendRequests.has(socket.decoded.id)) {
+                    pendingFriendRequests.set(socket.decoded.id, new Set());
+                }
+                mappedReqs.forEach(req => {
+                    pendingFriendRequests.get(socket.decoded.id).add(req.senderUserId);
+                });
+            }
+        }).catch(e => console.error("Pending sync error:", e));
+    }
+
     // --- Attach all signaling events from module ---
     signaling.attachToSocket(socket, io, checkRateLimit, sanitizeString); // sanitizeString eklendi (Madde 8 Fix)
 
     // --- Initial data push ---
     socket.emit('receive_rooms_info', getRoomsData());
-
-    // Madde 12 Fix: Bağlantı kurulduğunda bekleyen arkadaşlık isteklerini DB'den çek ve bildir
-    if (socket.decoded) {
-        UserRepository.getPendingFriendRequests(socket.decoded.id).then(requests => {
-            requests.forEach(req => {
-                socket.emit('friend_request_received', {
-                    senderId: 'offline_system', // Kalıcı istek olduğunu belirt
-                    senderUserId: req.sender_id,
-                    senderName: sanitizeString(req.sender_name),
-                    senderAvatar: sanitizeString(req.sender_avatar || '')
-                });
-                
-                // Sunucu tarafındaki yetkilendirme Map'ine de ekle
-                if (!pendingFriendRequests.has(socket.decoded.id)) {
-                    pendingFriendRequests.set(socket.decoded.id, new Set());
-                }
-                pendingFriendRequests.get(socket.decoded.id).add(req.sender_id);
-            });
-        }).catch(err => console.error("Pending friends check error:", err));
-    }
     socket.emit('games_info_update', getGamesData());
 
     // --- ROOMS INFO (tek handler) ---
@@ -532,7 +579,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const result = await MatchmakerService.handleFindMatch(socket, data);
+        const result = await MatchmakerService.handleFindMatch(socket, data, sanitizeString);
         
         if (result && result.matched) {
             // Güvenlik: Sinyalleşme yetkilendirmesi için eşleşme kaydı
@@ -657,56 +704,73 @@ io.on('connection', (socket) => {
     socket.on('leave_room', (data) => leaveRoom(socket, data.roomId));
 
     // --- FRIEND SYSTEM (Madde 20 & 23 Fix) ---
-    socket.on('friend_request', (data) => {
-        if (!checkRateLimit(socket)) return;
-        if (!data || !data.targetId) return;
-        
-        // Kendine istek atmayı engelle (Aynı socket veya aynı kullanıcı - farklı tab)
-        const targetSocket = io.sockets.sockets.get(data.targetId);
-        if (!targetSocket || !targetSocket.decoded) return;
-        
-        const decodedUser = socket.decoded;
-        const targetUserId = targetSocket.decoded.id;
-
-        // Madde 10: Hedef Bazlı Spam Koruması (Per-Target Rate Limit)
-        const senderRequests = friendRequestSpamMap.get(decodedUser.id) || new Set();
-        if (senderRequests.has(targetUserId)) {
-            socket.emit('friend_error', { msg: 'Bu kullanıcıya çok sık istek gönderiyorsunuz. Lütfen bekleyin.' });
-            return;
-        }
-        senderRequests.add(targetUserId);
-        friendRequestSpamMap.set(decodedUser.id, senderRequests);
-        
-        if (targetUserId === decodedUser.id) {
-            console.warn(`🚨 [Security] Kendine arkadaşlık isteği engellendi: ${decodedUser.username}`);
-            return;
-        }
-
-        // Spam Koruması: Zaten bekleyen bir istek var mı?
-        const targetPending = pendingFriendRequests.get(targetUserId);
-        if (targetPending && targetPending.has(decodedUser.id)) {
-            socket.emit('friend_error', { msg: 'Bu kullanıcıya zaten bir isteğiniz bulunuyor.' });
-            return;
-        }
-        
-        if (!pendingFriendRequests.has(targetUserId)) {
-            pendingFriendRequests.set(targetUserId, new Set());
-        }
-        pendingFriendRequests.get(targetUserId).add(decodedUser.id);
-        
-        // Madde 12 Fix: Kalıcı Kayıt (DB)
+    socket.on('friend_request', async (data) => {
         try {
-            await UserRepository.sendFriendRequest(decodedUser.id, targetUserId);
+            if (!checkRateLimit(socket)) return;
+            if (!data || !data.targetId) return;
+            
+            // Kendine istek atmayı engelle (Aynı socket veya aynı kullanıcı - farklı tab)
+            const targetSocket = io.sockets.sockets.get(data.targetId);
+            if (!targetSocket || !targetSocket.decoded) return;
+            
+            const decodedUser = socket.decoded;
+            const targetUserId = targetSocket.decoded.id;
+
+            // Madde 16 & 95 Fix: Gerçek Zamanlı Ban Kontrolü (Hedef Kullanıcı)
+            const targetDbUser = await UserRepository.getUserById(targetUserId);
+            if (!targetDbUser || targetDbUser.is_banned) {
+                socket.emit('friend_error', { msg: 'Bu kullanıcı şu an istek kabul etmiyor.' });
+                return;
+            }
+
+            // Madde 22 & 100 Fix: Map Referans Optimizasyonu (Performans & Kod Kalitesi)
+            let senderRequests = friendRequestSpamMap.get(decodedUser.id);
+            if (!senderRequests) {
+                senderRequests = new Map();
+                friendRequestSpamMap.set(decodedUser.id, senderRequests);
+            }
+            
+            const lastRequestTime = senderRequests.get(targetUserId) || 0;
+            const now = Date.now();
+            
+            if (now - lastRequestTime < 1 * 60 * 60 * 1000) {
+                socket.emit('friend_error', { msg: 'Bu kullanıcıya çok sık istek gönderiyorsunuz. Lütfen bir süre bekleyin.' });
+                return;
+            }
+            senderRequests.set(targetUserId, now);
+            
+            if (targetUserId === decodedUser.id) {
+                console.warn(`🚨 [Security] Kendine arkadaşlık isteği engellendi: ${decodedUser.username}`);
+                return;
+            }
+
+            // Spam Koruması: Zaten bekleyen bir istek var mı?
+            const targetPending = pendingFriendRequests.get(targetUserId);
+            if (targetPending && targetPending.has(decodedUser.id)) {
+                socket.emit('friend_error', { msg: 'Bu kullanıcıya zaten bir isteğiniz bulunuyor.' });
+                return;
+            }
+            
+            if (!pendingFriendRequests.has(targetUserId)) {
+                pendingFriendRequests.set(targetUserId, new Set());
+            }
+            pendingFriendRequests.get(targetUserId).add(decodedUser.id);
+            
+            // Madde 12 Fix: Kalıcı Kayıt (DB) - Non-blocking (Madde 18 tarzı)
+            UserRepository.sendFriendRequest(decodedUser.id, targetUserId).catch(e => console.error("🚨 [DB] Friend request error:", e.message));
+            
+            io.to(data.targetId).emit('friend_request_received', {
+                senderId: socket.id,
+                senderUserId: decodedUser.id,
+                senderName: sanitizeString(decodedUser.username),
+                senderAvatar: sanitizeString(decodedUser.avatarUrl || socket.currentAvatar || '') // Madde 8 Fix
+            });
+
+            socket.emit('friend_info', { msg: 'Arkadaşlık isteği gönderildi.' });
         } catch (e) {
-            console.error("DB friend request error:", e);
+            console.error("🚨 [Handler] Friend request processing error:", e);
+            socket.emit('friend_error', { msg: 'İşlem sırasında bir hata oluştu.' });
         }
-        
-        io.to(data.targetId).emit('friend_request_received', {
-            senderId: socket.id,
-            senderUserId: decodedUser.id,
-            senderName: sanitizeString(decodedUser.username),
-            senderAvatar: sanitizeString(decodedUser.avatarUrl || socket.currentAvatar || '') // Madde 8 Fix
-        });
     });
 
     socket.on('update_preference', async (data) => {
@@ -762,16 +826,24 @@ io.on('connection', (socket) => {
         
         const decodedUser = socket.decoded;
         if (decodedUser) {
-            // Madde 3: Yetkilendirme Kontrolü (Handshake Verification)
+            // Madde 6 Fix: Dağıtık sistem uyumluluğu - Map'te yoksa DB'den kontrol et
             const myPendingRequests = pendingFriendRequests.get(decodedUser.id);
-            if (!myPendingRequests || !myPendingRequests.has(data.friendUserId)) {
-                console.warn(`🚨 [Security] Yetkisiz Arkadaşlık Kabul Denemesi: ${decodedUser.username} -> ${data.friendUserId}`);
-                return;
+            const inMemoryMatch = myPendingRequests && myPendingRequests.has(data.friendUserId);
+            
+            if (!inMemoryMatch) {
+                const inDbMatch = await UserRepository.hasPendingFriendRequest(data.friendUserId, decodedUser.id);
+                if (!inDbMatch) {
+                    console.warn(`🚨 [Security] Yetkisiz Arkadaşlık Kabul Denemesi: ${decodedUser.username} -> ${data.friendUserId}`);
+                    return;
+                }
             }
 
             try {
                 await UserRepository.addFriend(decodedUser.id, data.friendUserId);
-                myPendingRequests.delete(data.friendUserId); // İstek işlendi, temizle
+                // Madde 2 & 5 Fix: Tam Tutarlılık - Güvenli silme (Null check)
+                if (pendingFriendRequests.has(decodedUser.id)) {
+                    pendingFriendRequests.get(decodedUser.id).delete(data.friendUserId);
+                }
                 console.log(`🤝 [Social] Arkadaşlık doğrulandı ve kuruldu: ${decodedUser.username} <-> ${data.friendUserId}`);
                 socket.emit('friend_success', { msg: 'Arkadaşlık isteği kabul edildi.' });
             } catch (e) {
@@ -809,14 +881,29 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- LOGOUT / TOKEN REVOCATION (Madde 17) ---
-    socket.on('logout', () => {
-        const token = socket.handshake.auth.token;
-        if (token) {
-            blacklistedTokens.add(token);
-            console.log(`🚪 [Auth] Kullanıcı çıkış yaptı, token iptal edildi: ${socket.decoded.username}`);
-            socket.disconnect();
+    // --- LOGOUT / TOKEN REVOCATION (Madde 15 & 17) ---
+    socket.on('logout', async (data) => {
+        const handshakeToken = socket.handshake.auth.token;
+        const currentToken = data && data.token;
+        const decodedUser = socket.decoded;
+        
+        // Madde 15 & 94 Fix: Hem el sıkışma (Handshake) hem de güncel token'ı yasakla
+        if (handshakeToken) blacklistedTokens.set(handshakeToken, Date.now() + 3600000);
+        if (currentToken && currentToken !== handshakeToken) {
+            blacklistedTokens.set(currentToken, Date.now() + 3600000);
         }
+        
+        if (decodedUser) {
+            console.log(`🚪 [Auth] Kullanıcı çıkış yaptı, session sonlandırıldı: ${decodedUser.username}`);
+            try {
+                // Madde 29 & 70 Fix: Tüm refresh token'ları veritabanından sil
+                await UserRepository.deleteUserRefreshTokens(decodedUser.id);
+            } catch (e) {
+                console.error("Logout DB cleanup error:", e);
+            }
+        }
+        
+        socket.disconnect();
     });
 
     // --- DISCONNECT ---
@@ -826,6 +913,9 @@ io.on('connection', (socket) => {
             // Madde 16 Fix: rateLimitMap.delete(socket.id) silindi (Hem yanlış key, hem bypass riski)
             console.log('❌ Ayrıldı:', socket.id, `(${decodedUser.username})`);
             clearUserFromAllRooms(decodedUser.id, socket);
+            
+            // Madde 21 Fix: Bellek temizliği (Memory Leak Prevention)
+            pendingFriendRequests.delete(decodedUser.id);
         } else {
             console.log('❌ [Zırhlı] Koptu (Bilinmeyen):', socket.id);
         }
@@ -853,8 +943,7 @@ io.on('connection', (socket) => {
             broadcastGamesInfo();
         }
 
-        // Rate limit temizliği
-        rateLimitMap.delete(socket.id);
+        // Rate limit temizliği (Madde 16 Fix: Artık periyodik cleanup tarafından yapılıyor)
     });
 });
 

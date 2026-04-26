@@ -195,9 +195,26 @@ const UserRepository = {
 
     async getUserById(userId) {
         if (!isDBConnected) {
-            return { id: userId, username: 'MockUser', gold_balance: 1000 };
+            // Madde 14 & 93 Fix: Mock veriyi tam şema ile senkronize et (Tutarlılık)
+            return { 
+                id: userId, 
+                username: 'MockUser', 
+                gold_balance: 1000, 
+                level: 1, 
+                xp: 0, 
+                is_vip: false, 
+                match_preference: 'mixed',
+                gender: 'belirtilmemiş',
+                age: 22,
+                region: 'Türkiye',
+                avatar_url: ''
+            };
         }
-        const res = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+        // Madde 25 & 81 Fix: Şema uyumlu kolon seçimi (gold -> gold_balance, reports_count silindi)
+        const res = await pool.query(
+            'SELECT id, username, avatar_url, gender, age, region, is_banned, match_preference, gold_balance, level, xp, is_vip FROM users WHERE id = $1', 
+            [userId]
+        );
         return res.rows[0];
     },
 
@@ -233,9 +250,17 @@ const UserRepository = {
     async sendFriendRequest(senderId, targetId) {
         if (!isDBConnected) return;
         await pool.query(
-            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT (user_id, friend_id) DO NOTHING',
             [senderId, targetId, 'pending']
         );
+    },
+    async hasPendingFriendRequest(senderId, targetId) {
+        if (!isDBConnected) return false;
+        const res = await pool.query(
+            'SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2 AND status = $3',
+            [senderId, targetId, 'pending']
+        );
+        return res.rowCount > 0;
     },
     async getPendingFriendRequests(userId) {
         if (!isDBConnected) return [];
@@ -310,9 +335,14 @@ const UserRepository = {
         );
         return res.rowCount > 0 ? res.rows[0].user_id : null;
     },
-    async deleteRefreshToken(token) {
-        if (!isDBConnected) return;
-        await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [token]);
+    async consumeRefreshToken(token) {
+        if (!isDBConnected) return null;
+        // Madde 11 Fix: Atomic Verify & Delete (Race Condition Prevention)
+        const res = await pool.query(
+            'DELETE FROM refresh_tokens WHERE token = $1 AND expires_at > NOW() RETURNING user_id',
+            [token]
+        );
+        return res.rowCount > 0 ? res.rows[0].user_id : null;
     },
     async deleteUserRefreshTokens(userId) {
         if (!isDBConnected) return;

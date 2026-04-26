@@ -15,7 +15,7 @@ const MatchmakerService = {
     /**
      * Eşleşme arayan kullanıcıyı işleme alır
      */
-    async handleFindMatch(socket, data) {
+    async handleFindMatch(socket, data, sanitizeString) {
         // Artik veriler istemciden (data) degil, Token'dan (socket.decoded) geliyor.
         const user = socket.decoded;
         console.log(`🔍 [Service] Eşleşme aranıyor... (Kullanıcı maskelendi)`);
@@ -55,16 +55,16 @@ const MatchmakerService = {
             // Madde 21 & 18 Fix: Non-blocking asenkron kayıt (Hata yönetimi dahil)
             UserRepository.recordMatch(user1.userId, user2.userId, 0).catch(e => console.error("🚨 [Service] Eşleşme kaydı hatası:", e.message));
 
-            // User 1'e haber ver
+            // User 1'e haber ver (Madde 17 & 96 Fix: oppUsername Sanitization)
             socket.emit('match_found', {
                 opponentId: user2.socketId,
                 role: 'caller', // Arayan taraf
                 iceBreaker,
-                oppUsername: user2.username,
-                oppGender: user2.gender,
-                oppRegion: user2.region,
+                oppUsername: sanitizeString(user2.username),
+                oppGender: sanitizeString(user2.gender),
+                oppRegion: sanitizeString(user2.region),
                 oppAge: user2.age,
-                oppZodiac: user2.zodiac
+                oppZodiac: sanitizeString(user2.zodiac || '')
             });
 
             // User 2'e haber ver (Global IO üzerinden veya socket.to kullanarak)
@@ -77,11 +77,11 @@ const MatchmakerService = {
                     opponentId: user1.socketId,
                     role: 'callee', // Aranan taraf
                     iceBreaker,
-                    oppUsername: user1.username,
-                    oppGender: user1.gender,
-                    oppRegion: user1.region,
+                    oppUsername: sanitizeString(user1.username),
+                    oppGender: sanitizeString(user1.gender),
+                    oppRegion: sanitizeString(user1.region),
                     oppAge: user1.age,
-                    oppZodiac: user1.zodiac
+                    oppZodiac: sanitizeString(user1.zodiac || '')
                 }
             };
         }

@@ -235,9 +235,7 @@ function initGameVoiceChat(targetId) {
 window.addFriendInCall = function() {
     if (typeof lastMatchData === "undefined" || !lastMatchData || !globalSocket) return;
     globalSocket.emit('friend_request', { 
-        targetId: (typeof webrtcClient !== "undefined" && webrtcClient) ? webrtcClient.targetId : null, 
-        senderName: currentUser.username,
-        senderAvatar: currentUser.avatarUrl
+        targetId: (typeof webrtcClient !== "undefined" && webrtcClient) ? webrtcClient.targetId : null
     });
     alert("Arkadaşlık isteği gönderildi!");
 };
@@ -674,25 +672,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ---- AUTHENTICATION & TOKEN MANAGEMENT (Zırhlı Yapı v2.2) ----
     const srvUrl = (window.location.protocol === 'file:') ? 'http://localhost:3000' : window.location.origin;
 
+    async function refreshSession() {
+        const refreshToken = localStorage.getItem('ozderRefreshToken');
+        if (!refreshToken) return null;
+
+        try {
+            const response = await fetch(`${srvUrl}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken })
+            });
+            const data = await response.json();
+            if (data.success) {
+                localStorage.setItem('ozderToken', data.token);
+                localStorage.setItem('ozderRefreshToken', data.refreshToken);
+                return data.token;
+            } else {
+                // Refresh başarısızsa temizle
+                localStorage.removeItem('ozderToken');
+                localStorage.removeItem('ozderRefreshToken');
+                localStorage.removeItem('ozderSession');
+                return null;
+            }
+        } catch (e) {
+            console.error("Token refresh error:", e);
+            return null;
+        }
+    }
+
     async function ensureAuth() {
         let session = safeParseJSON('ozderSession', null);
         let token = localStorage.getItem('ozderToken');
+        let rToken = localStorage.getItem('ozderRefreshToken');
+
+        // Madde 3 Fix: Eğer token varsa ama sessizce yenilenebiliyorsa yenile
+        if (token && rToken) {
+            const newToken = await refreshSession();
+            if (newToken) return newToken;
+        }
 
         if (!token || !session) {
             console.log("🔑 Yeni oturum oluşturuluyor...");
+            const array = new Uint8Array(16);
+            window.crypto.getRandomValues(array);
+            const guestPassword = Array.from(array, b => b.toString(16).padStart(2, '0')).join('') + 'A1!';
+            // Madde 12 & 92 Fix: Çakışmayı önlemek için Timestamp + Random (Scaleable)
+            const guestName = `User_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+            
             const response = await fetch(`${srvUrl}/api/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    username: `User_${Math.floor(Math.random() * 9000) + 1000}`,
+                    username: guestName,
+                    password: guestPassword,
                     age: 22,
-                    gender: 'kadın',
+                    gender: 'belirtilmemiş',
                     region: 'Türkiye'
                 })
             });
             const data = await response.json();
             if (data.success) {
                 localStorage.setItem('ozderToken', data.token);
+                localStorage.setItem('ozderRefreshToken', data.refreshToken); // Madde 3 Fix: Kaydet
                 localStorage.setItem('ozderSession', JSON.stringify(data.user));
                 return data.token;
             }
@@ -709,6 +750,31 @@ document.addEventListener('DOMContentLoaded', async () => {
                 auth: { token } // Sunucu artik bu Token'i kontrol edecek
             });
 
+            });
+
+            // Madde 25 & 103 Fix: Otomatik Oturum Yenileme & Bağlantı Kurtarma
+            globalSocket.on('connect_error', async (err) => {
+                console.warn("⚠️ Soket bağlantı hatası:", err.message);
+                
+                // Eğer hata yetkilendirme kaynaklıysa (Token expired vb.)
+                if (err.message.includes("Authentication error")) {
+                    console.log("🔄 Token süresi dolmuş olabilir, yenileniyor...");
+                    const newToken = await refreshSession();
+                    
+                    if (newToken) {
+                        // Yeni token ile tekrar bağlanmayı dene
+                        globalSocket.auth.token = newToken;
+                        globalSocket.connect();
+                        console.log("✅ Yeni token ile bağlantı onarıldı.");
+                    } else {
+                        // Refresh de başarısızsa (Oturum tamamen bitti)
+                        console.error("❌ Oturum yenilenemedi, login ekranına yönlendiriliyor.");
+                        alert("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+                        location.reload(); // Guest moduna düşür veya login'e at
+                    }
+                }
+            });
+
             // Initialize WebRTC Clients (Global & Ready to listen)
             webrtcClient = new AudioChatClient(globalSocket, document.getElementById('remote-audio'), () => {
                 console.log("☎️ Karşı taraf görüşmeyi sonlandırdı.");
@@ -723,8 +789,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             checkMutualConfirmation();
         });
 
-        // Arkadaşlık İsteği Sinyali
-        globalSocket.on('friend_request', (data) => {
+        // Madde 65 Fix: Bekleyen istekleri toplu işle (Offline iken gelenler)
+        globalSocket.on('pending_friend_requests', (requests) => {
+            requests.forEach(req => {
+                // Madde 6 Fix: Server artık camelCase (senderUserId, senderName, senderAvatar) gönderiyor
+                handleFriendRequestInternal({
+                    senderId: 'offline', 
+                    senderUserId: req.senderUserId,
+                    senderName: req.senderName,
+                    senderAvatar: req.senderAvatar
+                });
+            });
+        });
+
+        // Madde 65 & 4 Fix: Ortak Arkadaşlık İstek İşleyicisi (Local Function)
+        function handleFriendRequestInternal(data) {
             console.log("🤝 Yeni arkadaşlık isteği:", data.senderName);
             const modal = document.getElementById('friend-request-modal');
             const avatar = document.getElementById('friend-req-avatar');
@@ -736,19 +815,32 @@ document.addEventListener('DOMContentLoaded', async () => {
                 text.innerText = `${data.senderName} seni arkadaş olarak eklemek istiyor.`;
                 
                 acceptBtn.onclick = () => {
-                    globalSocket.emit('friend_request_accepted', { targetId: data.senderId, senderName: currentUser.username });
+                    globalSocket.emit('accept_friend_request', { 
+                        friendUserId: data.senderUserId, 
+                        targetId: data.senderId,
+                        senderName: currentUser.username 
+                    });
                     modal.classList.add('hidden');
-                    // Listeye ekle
                     if (!currentUser.friends) currentUser.friends = [];
                     const already = currentUser.friends.some(f => f.username === data.senderName);
                     if (!already) {
-                        currentUser.friends.push({ username: data.senderName, avatar: avatar.src, trust: '98%' });
+                        currentUser.friends.push({ 
+                            userId: data.senderUserId, // Madde 19 & 98 Fix: ID eklendi
+                            username: data.senderName, 
+                            avatarUrl: avatar.src, // Madde 18 Fix: avatar -> avatarUrl
+                            trust: '98%' 
+                        });
                         saveUser();
                         alert(`${data.senderName} ile artık arkadaşsınız!`);
                     }
                 };
                 modal.classList.remove('hidden');
             }
+        }
+
+        // Madde 2 & 4 Fix: Canlı isteği merkezi işleyiciye yönlendir (Local Call)
+        globalSocket.on('friend_request_received', (data) => {
+            handleFriendRequestInternal(data);
         });
 
         globalSocket.on('friend_request_accepted', (data) => {
@@ -757,7 +849,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.senderName}`;
             const already = currentUser.friends.some(f => f.username === data.senderName);
             if (!already) {
-                currentUser.friends.push({ username: data.senderName, avatar, trust: '98%' });
+                currentUser.friends.push({ 
+                    userId: data.senderUserId, // Madde 19 & 98 Fix: ID eklendi
+                    username: data.senderName, 
+                    avatarUrl: avatar, // Madde 18 Fix: avatar -> avatarUrl
+                    trust: '98%' 
+                });
                 saveUser();
             }
         });
@@ -1425,8 +1522,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         window.doLogout = function () {
             if (confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+                // Madde 29 & 70 Fix: Sunucuya bildir (Refresh token silinsin)
+                if (typeof globalSocket !== 'undefined' && globalSocket) {
+                    // Madde 15 & 94 Fix: Mevcut aktif token'ı da blacklist için gönder
+                    globalSocket.emit('logout', { token: localStorage.getItem('ozderToken') });
+                }
                 localStorage.removeItem('ozderSession');
+                localStorage.removeItem('ozderToken');
+                localStorage.removeItem('ozderRefreshToken');
                 location.reload();
+            }
+        }
+
+        window.submitReport = function (reason) {
+            if (!currentPeerId) { alert("Rapor edilecek kullanıcı bulunamadı."); return; }
+            if (globalSocket) {
+                globalSocket.emit('submit_report', { 
+                    targetId: currentPeerId, 
+                    reason: reason 
+                });
+                alert("Raporunuz moderatörlere iletildi. Teşekkürler. 🛡️");
+                document.getElementById('report-modal').classList.add('hidden');
+            }
+        }
+
+        window.removeFriend = function (userId) {
+            if (!confirm("Bu kişiyi arkadaş listenizden çıkarmak istediğinize emin misiniz?")) return;
+            if (globalSocket) {
+                globalSocket.emit('remove_friend', { friendUserId: userId });
+                currentUser.friends = currentUser.friends.filter(f => f.userId !== userId);
+                saveUser();
+                renderFriendsList();
+                alert("Arkadaş listeniz güncellendi.");
             }
         }
 
@@ -2001,11 +2128,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 audioChunks = [];
                 mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
                 mediaRecorder.onstop = () => {
-                    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const blobUrl = URL.createObjectURL(blob);
                     const reader = new FileReader();
                     reader.onloadend = () => {
                         const container = document.getElementById('chat-messages-container');
-                        container.innerHTML += `<div class="chat-bubble me"><audio controls src="${reader.result}" style="max-width:200px;"></audio></div>`;
+                        container.innerHTML += `<div class="chat-bubble me"><audio controls src="${blobUrl}" style="max-width:200px;"></audio></div>`;
                         container.scrollTop = container.scrollHeight;
                         if (globalSocket && webrtcClient && webrtcClient.targetId) {
                             globalSocket.emit('send_message', { targetId: webrtcClient.targetId, type: 'audio', audioData: reader.result });
@@ -2324,7 +2451,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </div>
                         <div class="f-actions">
                             <button class="f-btn dm" onclick="switchMainTab('messages')" title="Mesaj Gönder"><i class="fa-solid fa-paper-plane"></i></button>
-                            <button class="f-btn delete" onclick="removeFriend('${escapeHtml(f.username)}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
+                            <button class="f-btn delete" onclick="removeFriend('${f.userId}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
                         </div>
                     </div>
                 `;
@@ -2683,9 +2810,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addFriendInCall = function() {
         if (!lastMatchData || !webrtcClient || !webrtcClient.targetId) return;
         globalSocket.emit('friend_request', { 
-            targetId: webrtcClient.targetId, 
-            senderName: currentUser.username,
-            senderAvatar: currentUser.avatarUrl
+            targetId: webrtcClient.targetId
         });
         alert("Arkadaşlık isteği gönderildi!");
     };
