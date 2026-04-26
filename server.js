@@ -44,14 +44,14 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
             imgSrc: ["'self'", "data:", "https://api.dicebear.com", "https://assets.mixkit.co"],
-            connectSrc: ["'self'", "wss:", "https:", "https://cdn.socket.io", "*.streamtheworld.com", "*.musicradio.com"], // Madde 29
-            mediaSrc: ["'self'", "blob:", "data:", "*.streamtheworld.com", "*.musicradio.com"], // Madde 29
+            connectSrc: ["'self'", "wss:", "https:", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 14 Fix
+            mediaSrc: ["'self'", "blob:", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 25 Fix: data: kaldırıldı
             frameAncestors: ["'none'"], // Madde 17: Clickjacking Koruması
             objectSrc: ["'none'"],
             upgradeInsecureRequests: [],
         },
     },
-    xFrameOptions: { action: "deny" }
+    frameguard: { action: "deny" } // Madde 24 Fix: Modern Helmet uyumluluğu
 }));
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true })); // Sıkılaştırılmış CORS politikası
 
@@ -110,6 +110,30 @@ function isValidUUID(uuid) {
     return regex.test(uuid);
 }
 
+// IP Maskeleme (Privacy & GDPR/KVKK Compliance)
+function maskIP(ip) {
+    if (!ip) return 'unknown';
+    // Sadece son okteti/blok bilgisini gizle veya hashle
+    return crypto.createHash('sha256').update(ip + process.env.JWT_SECRET).digest('hex').substring(0, 10);
+}
+
+// --- AUTH HELPERS ---
+async function generateTokens(user) {
+    const accessToken = jwt.sign(
+        { id: user.id, username: user.username },
+        JWT_SECRET,
+        { expiresIn: '1h' } // Madde 29 Fix: Short-lived access token
+    );
+    
+    const refreshToken = crypto.randomBytes(40).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 gün
+    
+    await UserRepository.saveRefreshToken(user.id, refreshToken, expiresAt);
+    
+    return { accessToken, refreshToken };
+}
+
 app.post('/api/auth/register', async (req, res) => {
     const { username, password, age, gender, region } = req.body;
     
@@ -149,22 +173,35 @@ app.post('/api/auth/register', async (req, res) => {
             avatarUrl: newUser.avatarUrl || ''
         };
         
-        const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
-        res.json({ success: true, token, user: userPayload });
+        const { accessToken, refreshToken } = await generateTokens(newUser);
+        res.json({ success: true, token: accessToken, refreshToken, user: userPayload });
     } catch (err) {
         console.error("Register error:", err);
         res.status(500).json({ success: false, error: "Kayıt olurken bir hata oluştu." });
     }
 });
 
-const loginAttempts = new Map(); // username → { count, lockUntil }
+const loginAttempts = new Map(); // IP_username → { count, lockUntil }
+const blacklistedTokens = new Set(); // Madde 17: Logout yapılan tokenlar
+const friendRequestSpamMap = new Map(); // Madde 10: senderId -> Set of targetUserIds (Per windowMs)
 
 // Madde 12: Memory Leak Koruması (Periyodik Temizlik)
 setInterval(() => {
     const now = Date.now();
     for (const [user, attempt] of loginAttempts) {
-        if (now > attempt.lockUntil && attempt.count === 0) {
+        // Madde 17 Fix: Kilit süresi geçmiş VEYA 1 saattir işlem görmemiş kayıtları sil
+        if (now > attempt.lockUntil || (now - attempt.lastAttempt > 3600000)) {
             loginAttempts.delete(user);
+        }
+    }
+    // Madde 10: Arkadaşlık spam havuzunu temizle
+    friendRequestSpamMap.clear();
+
+    // Madde 16 Fix: Rate Limit haritasını temizle (Memory Leak Prevention)
+    const resetTime = now - (10 * 1000); // 10 saniyelik pencere
+    for (const [key, entry] of rateLimitMap) {
+        if (now > entry.resetTime) {
+            rateLimitMap.delete(key);
         }
     }
 }, 15 * 60000); // 15 dakikada bir temizle
@@ -181,7 +218,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Madde 26: Lockout DoS Koruması (IP + Username bazlı kilit)
     const lockKey = `${req.ip}_${username}`;
-    const attempt = loginAttempts.get(lockKey) || { count: 0, lockUntil: 0 };
+    const attempt = loginAttempts.get(lockKey) || { count: 0, lockUntil: 0, lastAttempt: Date.now() };
     if (Date.now() < attempt.lockUntil) {
         const remainingMin = Math.ceil((attempt.lockUntil - Date.now()) / 60000);
         return res.status(429).json({ success: false, error: `Çok fazla başarısız deneme. Lütfen ${remainingMin} dakika bekleyin.` });
@@ -190,12 +227,13 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const user = await UserRepository.getUserByUsername(username);
         if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
-            console.warn(`🚨 [Audit] Başarısız Giriş: ${username} (IP: ${req.ip})`);
+            console.warn(`🚨 [Audit] Başarısız Giriş: ${username} (IP: ${maskIP(req.ip)})`);
             attempt.count++;
             if (attempt.count >= 5) {
                 attempt.lockUntil = Date.now() + 5 * 60000;
                 attempt.count = 0;
             }
+            attempt.lastAttempt = Date.now(); // Madde 17 Fix: Son deneme zamanını güncelle
             loginAttempts.set(lockKey, attempt);
             return res.status(401).json({ success: false, error: "Hatalı kullanıcı adı veya şifre." });
         }
@@ -203,17 +241,38 @@ app.post('/api/auth/login', async (req, res) => {
         // Başarılı giriş: Denemeleri sıfırla
         loginAttempts.delete(lockKey);
 
-        const userPayload = { 
-            id: user.id,
-            username: user.username,
-            avatarUrl: user.avatarUrl || ''
-        };
+        const { accessToken, refreshToken } = await generateTokens(user);
         
-        const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
-        res.json({ success: true, token, user: userPayload });
+        res.json({ 
+            success: true, 
+            token: accessToken, 
+            refreshToken,
+            user: { id: user.id, username: user.username, avatarUrl: user.avatar_url || '' } 
+        });
     } catch (err) {
         console.error("Login error:", err);
-        res.status(500).json({ success: false, error: "Giriş yaparken bir hata oluştu." });
+        res.status(500).json({ success: false, error: "Giriş yapılırken bir hata oluştu." });
+    }
+});
+
+app.post('/api/auth/refresh', async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(401).json({ success: false });
+
+    try {
+        const userId = await UserRepository.verifyRefreshToken(refreshToken);
+        if (!userId) return res.status(403).json({ success: false, error: "Geçersiz veya süresi dolmuş refresh token." });
+
+        const user = await UserRepository.getUserById(userId);
+        if (!user || user.is_banned) return res.status(403).json({ success: false });
+
+        // Eski token'ı sil ve yeni set üret (Token Rotation)
+        await UserRepository.deleteRefreshToken(refreshToken);
+        const tokens = await generateTokens(user);
+        
+        res.json({ success: true, ...tokens });
+    } catch (err) {
+        res.status(500).json({ success: false });
     }
 });
 
@@ -225,6 +284,11 @@ io.use((socket, next) => {
     jwt.verify(token, JWT_SECRET, async (err, decoded) => {
         if (err) return next(new Error("Authentication error: Invalid token"));
         
+        // Madde 17: Blacklist kontrolü
+        if (blacklistedTokens.has(token)) {
+            return next(new Error("Authentication error: Token is revoked (logged out)"));
+        }
+
         try {
             // Güvenlik (Token Revocation): Kullanıcının banlı olup olmadığını anlık kontrol et
             const dbUser = await UserRepository.getUserById(decoded.id);
@@ -232,6 +296,8 @@ io.use((socket, next) => {
             if (dbUser.is_banned) return next(new Error("Authentication error: User is banned"));
             
             socket.decoded = decoded;
+            // Madde 7 Fix: JWT'deki eski avatar yerine DB'den taze avatarı socket'e bağla
+            socket.currentAvatar = dbUser.avatar_url || '';
             next();
         } catch (dbErr) {
             console.error("Token verification DB error:", dbErr);
@@ -246,8 +312,10 @@ const RATE_LIMIT = { maxRequests: 30, windowMs: 10000 }; // 30 istek / 10 saniye
 
 function checkRateLimit(socket) {
     const now = Date.now();
-    // Güvenlik: Proxy güveni sonrası gerçek IP (Madde 25)
-    const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;     const userId = socket.decoded ? socket.decoded.id : 'anon';
+    // Güvenlik: Proxy güveni sonrası gerçek IP (Madde 9 Fix: Sadece ilk IP'yi al)
+    const forwarded = socket.handshake.headers['x-forwarded-for'];
+    const clientIp = forwarded ? forwarded.split(',')[0].trim() : socket.handshake.address; 
+    const userId = socket.decoded ? socket.decoded.id : 'anon';
     const limitKey = `${userId}_${clientIp}`;
     
     let entry = rateLimitMap.get(limitKey);
@@ -259,7 +327,7 @@ function checkRateLimit(socket) {
     
     entry.count++;
     if (entry.count > RATE_LIMIT.maxRequests) {
-        console.warn(`🚨 [Audit] Socket Rate Limit İhlali: ${userId} (IP: ${clientIp})`);
+        console.warn(`🚨 [Audit] Socket Rate Limit İhlali: ${userId} (IP: ${maskIP(clientIp)})`);
     }
     return entry.count <= RATE_LIMIT.maxRequests;
 }
@@ -368,9 +436,9 @@ function getRoomsData() {
             cap: roomDefs[id].cap, 
             vip: roomDefs[id].vip, 
             radio: roomDefs[id].radio,
-            name: roomDefs[id].name, 
+            name: sanitizeString(roomDefs[id].name), // Madde 15 Fix: XSS Protection
             stream: roomDefs[id].stream,
-            avatars: rooms[id].slice(0, 3).map(u => u.avatarUrl) 
+            avatars: rooms[id].slice(0, 3).map(u => sanitizeString(u.avatarUrl || '')) 
         };
     }
     return info;
@@ -420,10 +488,30 @@ io.on('connection', (socket) => {
     console.log('📱 Bağlandı:', socket.id);
 
     // --- Attach all signaling events from module ---
-    signaling.attachToSocket(socket, io, checkRateLimit);
+    signaling.attachToSocket(socket, io, checkRateLimit, sanitizeString); // sanitizeString eklendi (Madde 8 Fix)
 
     // --- Initial data push ---
     socket.emit('receive_rooms_info', getRoomsData());
+
+    // Madde 12 Fix: Bağlantı kurulduğunda bekleyen arkadaşlık isteklerini DB'den çek ve bildir
+    if (socket.decoded) {
+        UserRepository.getPendingFriendRequests(socket.decoded.id).then(requests => {
+            requests.forEach(req => {
+                socket.emit('friend_request_received', {
+                    senderId: 'offline_system', // Kalıcı istek olduğunu belirt
+                    senderUserId: req.sender_id,
+                    senderName: sanitizeString(req.sender_name),
+                    senderAvatar: sanitizeString(req.sender_avatar || '')
+                });
+                
+                // Sunucu tarafındaki yetkilendirme Map'ine de ekle
+                if (!pendingFriendRequests.has(socket.decoded.id)) {
+                    pendingFriendRequests.set(socket.decoded.id, new Set());
+                }
+                pendingFriendRequests.get(socket.decoded.id).add(req.sender_id);
+            });
+        }).catch(err => console.error("Pending friends check error:", err));
+    }
     socket.emit('games_info_update', getGamesData());
 
     // --- ROOMS INFO (tek handler) ---
@@ -437,7 +525,6 @@ io.on('connection', (socket) => {
     });
 
     // --- SMART MATCHING (MatchmakerService entegrasyonu) ---
-    const matchLocks = {}; // Matchmaker için kilit (Top-level yerine socket içinde kalabilir çünkü handleFindMatch kendi kilidini yönetir)
     
     socket.on('find_match', async (data) => {
         if (!checkRateLimit(socket)) {
@@ -540,8 +627,8 @@ io.on('connection', (socket) => {
         const user = { 
             id: socket.id, 
             userId: decodedUser.id, 
-            username: decodedUser.username, 
-            avatarUrl: decodedUser.avatarUrl || finalAvatar 
+            username: sanitizeString(decodedUser.username), 
+            avatarUrl: sanitizeString(socket.currentAvatar || finalAvatar) // Madde 13 Fix: Deep Sanitization
         };
         
         rooms[roomId].push(user);
@@ -580,6 +667,15 @@ io.on('connection', (socket) => {
         
         const decodedUser = socket.decoded;
         const targetUserId = targetSocket.decoded.id;
+
+        // Madde 10: Hedef Bazlı Spam Koruması (Per-Target Rate Limit)
+        const senderRequests = friendRequestSpamMap.get(decodedUser.id) || new Set();
+        if (senderRequests.has(targetUserId)) {
+            socket.emit('friend_error', { msg: 'Bu kullanıcıya çok sık istek gönderiyorsunuz. Lütfen bekleyin.' });
+            return;
+        }
+        senderRequests.add(targetUserId);
+        friendRequestSpamMap.set(decodedUser.id, senderRequests);
         
         if (targetUserId === decodedUser.id) {
             console.warn(`🚨 [Security] Kendine arkadaşlık isteği engellendi: ${decodedUser.username}`);
@@ -598,15 +694,23 @@ io.on('connection', (socket) => {
         }
         pendingFriendRequests.get(targetUserId).add(decodedUser.id);
         
+        // Madde 12 Fix: Kalıcı Kayıt (DB)
+        try {
+            await UserRepository.sendFriendRequest(decodedUser.id, targetUserId);
+        } catch (e) {
+            console.error("DB friend request error:", e);
+        }
+        
         io.to(data.targetId).emit('friend_request_received', {
             senderId: socket.id,
             senderUserId: decodedUser.id,
-            senderName: decodedUser.username,
-            senderAvatar: decodedUser.avatarUrl || ''
+            senderName: sanitizeString(decodedUser.username),
+            senderAvatar: sanitizeString(decodedUser.avatarUrl || socket.currentAvatar || '') // Madde 8 Fix
         });
     });
 
     socket.on('update_preference', async (data) => {
+        if (!checkRateLimit(socket)) return;
         // Madde 15 & 16: Whitelist ve Input Validation
         const validPrefs = ['mixed', 'same_gender', 'same_region'];
         if (!data || !validPrefs.includes(data.matchPref)) return;
@@ -637,9 +741,13 @@ io.on('connection', (socket) => {
 
             try {
                 // Madde 2 DoS Fix: submitReport -> reportUser (database.js ile uyumlu hale getirildi)
-                await UserRepository.reportUser(decodedUser.id, data.reportedId, data.reason);
-                console.log(`🚨 [Report] ${decodedUser.username} rapor gönderdi: -> ${data.reportedId}`);
-                socket.emit('report_success', { msg: 'Raporunuz başarıyla iletildi. İnceleme başlatılacaktır.' });
+                const result = await UserRepository.reportUser(decodedUser.id, data.reportedId, data.reason);
+                if (result) {
+                    console.log(`🚨 [Report] ${decodedUser.username} rapor gönderdi: -> ${data.reportedId}`);
+                    socket.emit('report_success', { msg: 'Raporunuz başarıyla iletildi. İnceleme başlatılacaktır.' });
+                } else {
+                    socket.emit('report_error', { msg: 'Bu kullanıcıyı zaten raporladınız. Lütfen 24 saat bekleyin.' });
+                }
             } catch (e) {
                 console.error("Report submission error:", e);
             }
@@ -665,9 +773,49 @@ io.on('connection', (socket) => {
                 await UserRepository.addFriend(decodedUser.id, data.friendUserId);
                 myPendingRequests.delete(data.friendUserId); // İstek işlendi, temizle
                 console.log(`🤝 [Social] Arkadaşlık doğrulandı ve kuruldu: ${decodedUser.username} <-> ${data.friendUserId}`);
+                socket.emit('friend_success', { msg: 'Arkadaşlık isteği kabul edildi.' });
             } catch (e) {
                 console.error("Add friend error:", e);
             }
+        }
+    });
+
+    socket.on('reject_friend_request', async (data) => {
+        if (!data || !data.friendUserId || !isValidUUID(data.friendUserId)) return;
+        const decodedUser = socket.decoded;
+        if (decodedUser) {
+            try {
+                await UserRepository.rejectFriendRequest(decodedUser.id, data.friendUserId);
+                if (pendingFriendRequests.has(decodedUser.id)) {
+                    pendingFriendRequests.get(decodedUser.id).delete(data.friendUserId);
+                }
+                socket.emit('friend_info', { msg: 'İstek reddedildi.' });
+            } catch (e) {
+                console.error("Reject friend error:", e);
+            }
+        }
+    });
+
+    socket.on('remove_friend', async (data) => {
+        if (!data || !data.friendUserId || !isValidUUID(data.friendUserId)) return;
+        const decodedUser = socket.decoded;
+        if (decodedUser) {
+            try {
+                await UserRepository.removeFriend(decodedUser.id, data.friendUserId);
+                socket.emit('friend_info', { msg: 'Arkadaş listenizden çıkarıldı.' });
+            } catch (e) {
+                console.error("Remove friend error:", e);
+            }
+        }
+    });
+
+    // --- LOGOUT / TOKEN REVOCATION (Madde 17) ---
+    socket.on('logout', () => {
+        const token = socket.handshake.auth.token;
+        if (token) {
+            blacklistedTokens.add(token);
+            console.log(`🚪 [Auth] Kullanıcı çıkış yaptı, token iptal edildi: ${socket.decoded.username}`);
+            socket.disconnect();
         }
     });
 
@@ -675,8 +823,9 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const decodedUser = socket.decoded;
         if (decodedUser) {
+            // Madde 16 Fix: rateLimitMap.delete(socket.id) silindi (Hem yanlış key, hem bypass riski)
+            console.log('❌ Ayrıldı:', socket.id, `(${decodedUser.username})`);
             clearUserFromAllRooms(decodedUser.id, socket);
-            console.log(`❌ [Zırhlı] Kullanıcı bağlantısı koptu. (ID: ${socket.id})`);
         } else {
             console.log('❌ [Zırhlı] Koptu (Bilinmeyen):', socket.id);
         }

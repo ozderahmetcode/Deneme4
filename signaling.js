@@ -6,6 +6,8 @@
  * 1-on-1 eşleşme, oda içi ses ve özel arama sinyallerini yönetir.
  */
 
+const { UserRepository } = require('./database');
+
 function setupSignaling(io) {
     // Bu fonksiyon io.on('connection') callback'i içinde çağrılır
     // Her socket için sinyal eventlerini bağlar
@@ -13,7 +15,7 @@ function setupSignaling(io) {
         /**
          * Socket'e tüm WebRTC sinyal eventlerini bağla
          */
-        attachToSocket(socket, io, checkRateLimit) {
+        attachToSocket(socket, io, checkRateLimit, sanitizeString) {
             // --- 1-ON-1 WEBRTC SIGNALING ---
             socket.on("webrtc_offer", (p) => {
                 if (!p || !p.targetId) return;
@@ -63,32 +65,54 @@ function setupSignaling(io) {
             });
 
             // --- PRIVATE CALL SIGNALING (DM - Madde 8 & 9 Fix) ---
-            socket.on('private_call_init', (data) => {
+            socket.on('private_call_init', async (data) => {
                 if (!checkRateLimit(socket)) return;
                 if (!data || !data.targetId) return;
                 if (data.targetId === socket.id) return; // Kendini arama
 
                 const decodedUser = socket.decoded;
-                io.to(data.targetId).emit('private_call_incoming', {
-                    callerId: socket.id,
-                    type: data.type,
-                    callerName: decodedUser.username,
-                    callerAvatar: decodedUser.avatarUrl || ''
-                });
+                const targetSocket = io.sockets.sockets.get(data.targetId);
+                
+                if (targetSocket && targetSocket.decoded) {
+                    // Madde 8 Fix: Arkadaşlık kontrolü (Peer Check)
+                    const areFriends = await UserRepository.isFriends(decodedUser.id, targetSocket.decoded.id);
+                    if (!areFriends) {
+                        console.warn(`🚨 [Security] Yetkisiz Arama Denemesi: ${decodedUser.username} -> ${targetSocket.decoded.id}`);
+                        socket.emit('call_error', { msg: 'Sadece arkadaşlarınızı arayabilirsiniz.' });
+                        return;
+                    }
+
+                    io.to(data.targetId).emit('private_call_incoming', {
+                        callerId: socket.id,
+                        type: data.type,
+                        callerName: sanitizeString(decodedUser.username),
+                        callerAvatar: sanitizeString(socket.currentAvatar || '') // Madde 8 Fix
+                    });
+                }
             });
 
-            socket.on('private_call_accept', (data) => {
+            socket.on('private_call_accept', async (data) => {
                 if (!data || !data.targetId) return;
                 
-                // Güvenlik: Arama kabul edildiğinde her iki tarafı birbirine bağla (Handshake)
+                const decodedUser = socket.decoded;
                 const targetSocket = io.sockets.sockets.get(data.targetId);
                 if (targetSocket) {
+                    // Madde 22 & 23: Güvenlik - Sadece arkadaşlar arayabilir (Doğrulama)
+                    const isFriends = await UserRepository.isFriends(socket.decoded.id, targetSocket.decoded.id);
+                    if (!isFriends) {
+                        socket.emit('private_call_error', { msg: 'Sadece arkadaşlarınızla arama yapabilirsiniz.' });
+                        return;
+                    }
+
                     socket.matchedPeerId = data.targetId;
                     targetSocket.matchedPeerId = socket.id;
                     
                     io.to(data.targetId).emit('private_call_accepted', {
                         responderId: socket.id
                     });
+                } else {
+                    // Madde 23 Fix: Karşı taraf düştüyse bildir (UX)
+                    socket.emit('private_call_error', { msg: 'Arayan kişi bağlantısını kopardı.' });
                 }
             });
 
@@ -110,7 +134,9 @@ function setupSignaling(io) {
                 });
                 // Bağlantıyı temizle
                 if (socket.matchedPeerId === data.targetId) socket.matchedPeerId = null;
-            }); socket.on('private_call_hangup', (data) => {
+            });
+
+            socket.on('private_call_hangup', (data) => {
                 if (!data || !data.targetId) return;
                 if (data.targetId !== socket.matchedPeerId) return;
                 io.to(data.targetId).emit('private_call_finished', { senderId: socket.id });

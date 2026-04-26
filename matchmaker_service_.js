@@ -43,6 +43,7 @@ const MatchmakerService = {
             preference: data.preference || (dbUser ? dbUser.match_preference : 'mixed'), 
             regionFilter: data.regionFilter,
             age: dbUser ? dbUser.age : 18,
+            zodiac: dbUser ? dbUser.zodiac : '', // Madde 12 Fix: Zodiac Sync
             isVIP: isVIP
         });
 
@@ -51,8 +52,8 @@ const MatchmakerService = {
             const { user1, user2 } = matchResult;
             const iceBreaker = "En son ne zaman gerçekten mutlu hissettin?";
 
-            // Madde 21: Ödül
-            try { UserRepository.recordMatch(user1.userId, user2.userId, 0); } catch(e){}
+            // Madde 21 & 18 Fix: Non-blocking asenkron kayıt (Hata yönetimi dahil)
+            UserRepository.recordMatch(user1.userId, user2.userId, 0).catch(e => console.error("🚨 [Service] Eşleşme kaydı hatası:", e.message));
 
             // User 1'e haber ver
             socket.emit('match_found', {

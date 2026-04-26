@@ -117,6 +117,18 @@ async function initDB() {
                 reporter_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 reported_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 reason TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(reporter_id, reported_id)
+            );
+        `);
+
+        // Refresh Token Tablosu
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                token TEXT UNIQUE NOT NULL,
+                expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -207,27 +219,104 @@ const UserRepository = {
     },
     async addFriend(userId, friendId) {
         if (!isDBConnected) return;
+        // Mevcut isteği kabul et (Status güncelle)
         await pool.query(
-            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($2, $1, $3) ON CONFLICT (user_id, friend_id) DO UPDATE SET status = $3',
             [userId, friendId, 'accepted']
         );
         // Karşılıklı ekleme
         await pool.query(
-            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-            [friendId, userId, 'accepted']
+            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT (user_id, friend_id) DO UPDATE SET status = $3',
+            [userId, friendId, 'accepted']
         );
+    },
+    async sendFriendRequest(senderId, targetId) {
+        if (!isDBConnected) return;
+        await pool.query(
+            'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+            [senderId, targetId, 'pending']
+        );
+    },
+    async getPendingFriendRequests(userId) {
+        if (!isDBConnected) return [];
+        const res = await pool.query(
+            `SELECT f.user_id as sender_id, u.username as sender_name, u.avatar_url as sender_avatar 
+             FROM friendships f 
+             JOIN users u ON f.user_id = u.id 
+             WHERE f.friend_id = $1 AND f.status = 'pending'`,
+            [userId]
+        );
+        return res.rows;
+    },
+    async rejectFriendRequest(userId, friendId) {
+        if (!isDBConnected) return;
+        await pool.query(
+            'DELETE FROM friendships WHERE user_id = $1 AND friend_id = $2 AND status = $3',
+            [friendId, userId, 'pending']
+        );
+    },
+    async removeFriend(userId, friendId) {
+        if (!isDBConnected) return;
+        await pool.query(
+            'DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+            [userId, friendId]
+        );
+    },
+    async isFriends(userId, friendId) {
+        if (!isDBConnected) return true; // Mock modunda izin ver
+        const res = await pool.query(
+            'SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2 AND status = $3',
+            [userId, friendId, 'accepted']
+        );
+        return res.rowCount > 0;
     },
     async reportUser(reporterId, reportedId, reason) {
         if (!isDBConnected) return;
+
+        // Madde 11 Fix: 24 saatlik mükerrer rapor kontrolü (Report Spam Protection)
+        const checkRes = await pool.query(
+            'SELECT id FROM reports WHERE reporter_id = $1 AND reported_id = $2 AND created_at > NOW() - INTERVAL \'24 hours\'',
+            [reporterId, reportedId]
+        );
+        
+        if (checkRes.rowCount > 0) {
+            console.warn(`⚠️ [Audit] Mükerrer rapor engellendi: ${reporterId} -> ${reportedId}`);
+            return false; // Başarısız/Engellendi
+        }
+
         await pool.query(
-            'INSERT INTO reports (reporter_id, reported_id, reason) VALUES ($1, $2, $3)',
+            'INSERT INTO reports (reporter_id, reported_id, reason) VALUES ($1, $2, $3) ON CONFLICT (reporter_id, reported_id) DO NOTHING',
             [reporterId, reportedId, reason]
         );
+        return true;
     },
     async updateUserPreference(userId, preference) {
         if (!isDBConnected) return;
-        // Madde 6 Fix: 'region' kolonu yerine 'match_preference' kolonuna yaz
         await pool.query('UPDATE users SET match_preference = $1 WHERE id = $2', [preference, userId]);
+    },
+    // --- REFRESH TOKEN METHODS ---
+    async saveRefreshToken(userId, token, expiresAt) {
+        if (!isDBConnected) return;
+        await pool.query(
+            'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+            [userId, token, expiresAt]
+        );
+    },
+    async verifyRefreshToken(token) {
+        if (!isDBConnected) return null;
+        const res = await pool.query(
+            'SELECT user_id FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()',
+            [token]
+        );
+        return res.rowCount > 0 ? res.rows[0].user_id : null;
+    },
+    async deleteRefreshToken(token) {
+        if (!isDBConnected) return;
+        await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [token]);
+    },
+    async deleteUserRefreshTokens(userId) {
+        if (!isDBConnected) return;
+        await pool.query('DELETE FROM refresh_tokens WHERE user_id = $1', [userId]);
     }
 };
 

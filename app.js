@@ -9,12 +9,21 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function isValidUrl(url) {
-    if (!url) return false;
+function isValidUrl(string) {
     try {
-        const parsed = new URL(url);
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch (e) {
+        const url = new URL(string);
+        const isSecure = url.protocol === "http:" || url.protocol === "https:";
+        const hostname = url.hostname.toLowerCase();
+        
+        // Blacklist: Local/Private IPs (Madde 22 Fix)
+        const isInternal = hostname === 'localhost' || 
+                           hostname === '127.0.0.1' || 
+                           hostname.startsWith('192.168.') || 
+                           hostname.startsWith('10.') || 
+                           hostname.startsWith('172.');
+                           
+        return isSecure && !isInternal;
+    } catch (_) {
         return false;
     }
 }
@@ -2051,8 +2060,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const container = document.getElementById('chat-messages-container');
                 if (!container) return;
                 if (data.type === 'audio') {
-                    const safeAudio = escapeHtml(data.audioData);
-                    container.innerHTML += `<div class="chat-bubble them"><audio controls src="${safeAudio}" style="max-width:200px;"></audio></div>`;
+                    // Madde 25 Fix: Data URI yerine Blob kullanarak CSP'yi daralt (media-src 'data:' kaldırılabilir)
+                    try {
+                        const parts = data.audioData.split(',');
+                        const byteString = atob(parts[1]);
+                        const mimeString = parts[0].split(':')[1].split(';')[0];
+                        const ab = new ArrayBuffer(byteString.length);
+                        const ia = new Uint8Array(ab);
+                        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+                        const blob = new Blob([ab], {type: mimeString});
+                        const blobUrl = URL.createObjectURL(blob);
+                        
+                        container.innerHTML += `<div class="chat-bubble them"><audio controls src="${blobUrl}" style="max-width:200px;"></audio></div>`;
+                    } catch (e) {
+                        console.error("Audio blob error:", e);
+                    }
                 } else if (data.type === 'photo') {
                     const safePhoto = escapeHtml(data.photoData);
                     if (data.ephemeral) {
