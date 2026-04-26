@@ -115,7 +115,8 @@ app.post('/api/auth/register', async (req, res) => {
 
         const userPayload = { 
             id: newUser.id,
-            username: newUser.username
+            username: newUser.username,
+            avatarUrl: newUser.avatarUrl || ''
         };
         
         const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
@@ -159,7 +160,8 @@ app.post('/api/auth/login', async (req, res) => {
 
         const userPayload = { 
             id: user.id,
-            username: user.username
+            username: user.username,
+            avatarUrl: user.avatarUrl || ''
         };
         
         const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
@@ -517,9 +519,13 @@ io.on('connection', (socket) => {
 
     socket.on('leave_room', (data) => leaveRoom(socket, data.roomId));
 
-    // --- FRIEND SYSTEM ---
+    // --- FRIEND SYSTEM (Madde 20 & 23 Fix) ---
     socket.on('friend_request', (data) => {
+        if (!checkRateLimit(socket)) return;
         if (!data || !data.targetId) return;
+        
+        // Kendine istek atmayı engelle
+        if (data.targetId === socket.id) return;
         
         // Güvenlik: Gönderen bilgileri istemciden değil, doğrulanmış Token'dan alınır
         const decodedUser = socket.decoded;

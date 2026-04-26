@@ -262,6 +262,9 @@ class TetrisGame {
     }
 
     updateOpponentBoard(newBoard) {
+        // Madde 22: Input Validation (DoS Koruması)
+        if (!Array.isArray(newBoard) || newBoard.length > 22) return; 
+        if (newBoard.some(row => !Array.isArray(row) || row.length > 12)) return;
         this.oppBoard = newBoard;
     }
 

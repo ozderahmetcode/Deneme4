@@ -9,6 +9,16 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function isValidUrl(url) {
+    if (!url) return false;
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+        return false;
+    }
+}
+
 // ---- GLOBAL PLAYER & DATA (File-level access) ----
 const radioPlayer = new Audio();
 radioPlayer.volume = 0.5;
@@ -1641,6 +1651,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Stop previous if any
             radioAudio.pause();
+            if (!isValidUrl(url)) {
+                console.error("Zararlı radyo URL engellendi.");
+                return;
+            }
             radioAudio.src = url;
             radioAudio.load();
             radioAudio.volume = document.getElementById('radio-volume-slider').value;
