@@ -54,21 +54,41 @@ function setupSignaling(io) {
                 io.to(p.targetId).emit("room_webrtc_ice_candidate", { senderId: socket.id, candidate: p.candidate });
             });
 
-            // --- PRIVATE CALL SIGNALING (DM) ---
+            // --- PRIVATE CALL SIGNALING (DM - Madde 8 & 9 Fix) ---
             socket.on('private_call_init', (data) => {
+                if (!checkRateLimit(socket)) return;
                 if (!data || !data.targetId) return;
-            const decodedUser = socket.decoded;
-            io.to(data.targetId).emit('private_call_incoming', {
-                callerId: socket.id,
-                type: data.type,
-                callerName: decodedUser.username,
-                callerAvatar: decodedUser.avatarUrl || ''
+                if (data.targetId === socket.id) return; // Kendini arama
+
+                const decodedUser = socket.decoded;
+                io.to(data.targetId).emit('private_call_incoming', {
+                    callerId: socket.id,
+                    type: data.type,
+                    callerName: decodedUser.username,
+                    callerAvatar: decodedUser.avatarUrl || ''
+                });
             });
+
+            socket.on('private_call_accept', (data) => {
+                if (!data || !data.targetId) return;
+                
+                // Güvenlik: Arama kabul edildiğinde her iki tarafı birbirine bağla (Handshake)
+                const targetSocket = io.sockets.sockets.get(data.targetId);
+                if (targetSocket) {
+                    socket.matchedPeerId = data.targetId;
+                    targetSocket.matchedPeerId = socket.id;
+                    
+                    io.to(data.targetId).emit('private_call_accepted', {
+                        responderId: socket.id
+                    });
+                }
             });
 
             socket.on('private_call_signal', (data) => {
                 if (!data || !data.targetId) return;
+                // Güvenlik: Sadece doğrulanmış (accepted) peer ile sinyalleş
                 if (data.targetId !== socket.matchedPeerId) return;
+                
                 io.to(data.targetId).emit('private_call_signal', {
                     senderId: socket.id,
                     signal: data.signal
@@ -77,11 +97,12 @@ function setupSignaling(io) {
 
             socket.on('private_call_reject', (data) => {
                 if (!data || !data.targetId) return;
-                if (data.targetId !== socket.matchedPeerId) return;
-                io.to(data.targetId).emit('private_call_rejected', { senderId: socket.id });
-            });
-
-            socket.on('private_call_hangup', (data) => {
+                io.to(data.targetId).emit('private_call_rejected', {
+                    responderId: socket.id
+                });
+                // Bağlantıyı temizle
+                if (socket.matchedPeerId === data.targetId) socket.matchedPeerId = null;
+            }); socket.on('private_call_hangup', (data) => {
                 if (!data || !data.targetId) return;
                 if (data.targetId !== socket.matchedPeerId) return;
                 io.to(data.targetId).emit('private_call_finished', { senderId: socket.id });
