@@ -279,10 +279,11 @@ function renderHistory() {
         if (validHistory.length === 0) { container.style.display = 'none'; return; }
         container.style.display = 'flex';
         validHistory.slice(-3).forEach(h => {
+            const safeName = escapeHtml(h.name);
             container.innerHTML += `
             <div class="history-item" onclick="premiumAlert('Geçmiş eşleşmeye tekrar bağlanmak VIP özelliğidir.')">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${h.name}&backgroundColor=111">
-                <span>${h.name}</span> <i class="fa-solid fa-phone"></i>
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${safeName}&backgroundColor=111">
+                <span>${safeName}</span> <i class="fa-solid fa-phone"></i>
             </div>`;
         });
     } catch(e) {}
@@ -301,18 +302,20 @@ function renderFriendsList() {
             return;
         }
         friends.forEach(f => {
+            const safeUsername = escapeHtml(f.username);
+            const safeAvatar = escapeHtml(f.avatar);
             list.innerHTML += `
                 <div class="friend-card-premium">
                     <div class="f-info">
-                        <img src="${f.avatar}" class="f-avatar">
+                        <img src="${safeAvatar}" class="f-avatar">
                         <div>
-                            <div class="f-name">${escapeHtml(f.username)}</div>
+                            <div class="f-name">${safeUsername}</div>
                             <div class="f-trust"><i class="fa-solid fa-shield-halved"></i> Güven: ${f.trust || '98%'}</div>
                         </div>
                     </div>
                     <div class="f-actions">
                         <button class="f-btn dm" onclick="switchMainTab('messages')" title="Mesaj Gönder"><i class="fa-solid fa-paper-plane"></i></button>
-                        <button class="f-btn delete" onclick="removeFriend('${escapeHtml(f.username)}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
+                        <button class="f-btn delete" onclick="removeFriend('${safeUsername.replace(/'/g, "\\'")}')" title="Arkadaştan Çıkar"><i class="fa-solid fa-trash-can"></i></button>
                     </div>
                 </div>
             `;
@@ -809,11 +812,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     listContainer.innerHTML = '<div style="padding:10px; font-size:0.7rem; color:#aaa; text-align:center;">Kimse yok.</div>';
                 } else {
                     participants.forEach(p => {
-                        const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
+                        const safeUsername = escapeHtml(p.username);
+                        const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${safeUsername}`;
+                        const safeAvatar = escapeHtml(avatar);
                         listContainer.innerHTML += `
                             <div class="participant-item">
-                                <img src="${avatar}">
-                                <span>${p.username} ${p.id === globalSocket.id ? '(Sen)' : ''}</span>
+                                <img src="${safeAvatar}">
+                                <span>${safeUsername} ${p.id === globalSocket.id ? '(Sen)' : ''}</span>
                             </div>
                         `;
                     });
@@ -824,14 +829,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (gridContainer) {
                 gridContainer.innerHTML = '';
                 participants.forEach(p => {
-                    const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`;
+                    const safeUsername = escapeHtml(p.username);
+                    const safeId = escapeHtml(p.id);
+                    const avatar = p.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${safeUsername}`;
+                    const safeAvatar = escapeHtml(avatar);
+                    
                     gridContainer.innerHTML += `
                         <div style="text-align:center;">
-                            <img src="${avatar}" class="speaker-avatar-${p.id}" 
-                                 onclick="window.openUserPreview('${p.username}', '${p.id}', '${avatar}')"
+                            <img src="${safeAvatar}" class="speaker-avatar-${safeId}" 
+                                 onclick="window.openUserPreview('${safeUsername.replace(/'/g, "\\'")}', '${safeId}', '${safeAvatar.replace(/'/g, "\\'")}')"
                                  style="width:45px; height:45px; border-radius:50%; border:2px solid ${p.id === globalSocket.id ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}; cursor:pointer; transition: all 0.3s;" 
-                                 onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}'">
-                            <div style="font-size:0.6rem; color:white; margin-top:5px; max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.username}</div>
+                                 onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${safeUsername}'">
+                            <div style="font-size:0.6rem; color:white; margin-top:5px; max-width:50px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${safeUsername}</div>
                         </div>
                     `;
                 });
@@ -2029,19 +2038,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const container = document.getElementById('chat-messages-container');
                 if (!container) return;
                 if (data.type === 'audio') {
-                    container.innerHTML += `<div class="chat-bubble them"><audio controls src="${data.audioData}" style="max-width:200px;"></audio></div>`;
+                    const safeAudio = escapeHtml(data.audioData);
+                    container.innerHTML += `<div class="chat-bubble them"><audio controls src="${safeAudio}" style="max-width:200px;"></audio></div>`;
                 } else if (data.type === 'photo') {
+                    const safePhoto = escapeHtml(data.photoData);
                     if (data.ephemeral) {
                         // Tek kullanımlık: ekran koruma + 5s sonra sil
                         const id = 'eph-' + Date.now();
-                        container.innerHTML += `<div class="chat-bubble them" id="${id}" style="position:relative;"><div style="font-size:0.6rem; color:#ff7675; margin-bottom:3px;">🔒 Tek Kullanımlık - Ekran görüntüsü engellendi</div><img src="${data.photoData}" style="max-width:200px; border-radius:10px; -webkit-user-select:none; user-select:none; pointer-events:none;" oncontextmenu="return false;"><div class="ss-shield" style="position:absolute; top:0; left:0; width:100%; height:100%; background:transparent; z-index:5;"></div></div>`;
+                        container.innerHTML += `<div class="chat-bubble them" id="${id}" style="position:relative;"><div style="font-size:0.6rem; color:#ff7675; margin-bottom:3px;">🔒 Tek Kullanımlık - Ekran görüntüsü engellendi</div><img src="${safePhoto}" style="max-width:200px; border-radius:10px; -webkit-user-select:none; user-select:none; pointer-events:none;" oncontextmenu="return false;"><div class="ss-shield" style="position:absolute; top:0; left:0; width:100%; height:100%; background:transparent; z-index:5;"></div></div>`;
                         // 5 saniye sonra sil
                         setTimeout(() => {
                             const el = document.getElementById(id);
                             if (el) el.innerHTML = '<span style="color:#aaa; font-size:0.7rem;">🔒 Tek kullanımlık fotoğrafın süresi doldu</span>';
                         }, 5000);
                     } else {
-                        container.innerHTML += `<div class="chat-bubble them"><img src="${escapeHtml(data.photoData)}" style="max-width:200px; border-radius:10px;"></div>`;
+                        container.innerHTML += `<div class="chat-bubble them"><img src="${safePhoto}" style="max-width:200px; border-radius:10px;"></div>`;
                     }
                 } else {
                     container.innerHTML += `<div class="chat-bubble them"><span>${escapeHtml(data.text)}</span></div>`;
