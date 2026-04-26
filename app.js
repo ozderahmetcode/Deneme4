@@ -254,7 +254,7 @@ function updateProfileUI() {
             const age = currentUser.age || 'Gizli';
             const ht = currentUser.height ? currentUser.height + 'cm' : 'Gizli';
             const wt = currentUser.weight ? currentUser.weight + 'kg' : 'Gizli';
-            bioText.innerHTML = `Yaş: ${age} | Boy: ${ht} | Kilo: ${wt}<br>${currentUser.bio || 'Henüz bir bio eklenmemiş...'}`;
+            bioText.innerHTML = `Yaş: ${age} | Boy: ${ht} | Kilo: ${wt}<br>${escapeHtml(currentUser.bio || 'Henüz bir bio eklenmemiş...')}`;
         }
         if (avatarImg) {
             avatarImg.src = currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`;
@@ -1931,12 +1931,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         window.quitGame = function () {
+            if (activeGame) {
+                if (typeof activeGame.forceEnd === 'function') {
+                    activeGame.forceEnd();
+                } else if (activeGame.isGameOver !== undefined) {
+                    activeGame.isGameOver = true;
+                }
+            }
             if (globalSocket && gameOpponentId) {
                 globalSocket.emit('end_call', { targetId: gameOpponentId });
             }
             activeGame = null;
             clearInterval(gameTimer);
             hideOverlays();
+            
+            // XOX Tahtasını temizle (iç içe geçmemesi için)
+            const xoxWrapper = document.getElementById('xox-board-wrapper');
+            if (xoxWrapper) xoxWrapper.innerHTML = '';
+            
             showTab('home-screen');
         }
 
@@ -1965,7 +1977,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!input || !input.value.trim()) return;
             const msg = input.value.trim();
             const container = document.getElementById('chat-messages-container');
-            container.innerHTML += `<div class="chat-bubble me"><span>${msg}</span></div>`;
+            container.innerHTML += `<div class="chat-bubble me"><span>${escapeHtml(msg)}</span></div>`;
             input.value = '';
             container.scrollTop = container.scrollHeight;
 

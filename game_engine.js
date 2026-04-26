@@ -265,51 +265,63 @@ class TetrisGame {
     }
 
     initControls() {
+        // Bound handler referanslarını tutalım ki silerken kullanabilelim
+        this._keydownHandler = this._handleKeydown.bind(this);
+        this._touchStartHandler = this._handleTouchStart.bind(this);
+        this._touchEndHandler = this._handleTouchEnd.bind(this);
+
         // Klavye kontrolleri
-        document.addEventListener('keydown', e => {
-            if (this.isGameOver) return;
-            if (e.key === 'ArrowLeft') this.move(-1);
-            if (e.key === 'ArrowRight') this.move(1);
-            if (e.key === 'ArrowDown') this.drop();
-            if (e.key === 'ArrowUp') this.rotate();
-        });
+        document.addEventListener('keydown', this._keydownHandler);
 
         // Mobil Touch Kontrolleri (Swipe)
-        let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+        this.touchStartX = 0; 
+        this.touchStartY = 0; 
+        this.touchStartTime = 0;
+
+        this.canvas.addEventListener('touchstart', this._touchStartHandler, { passive: false });
+        this.canvas.addEventListener('touchend', this._touchEndHandler, { passive: false });
+    }
+
+    _handleKeydown(e) {
+        if (this.isGameOver) return;
+        if (e.key === 'ArrowLeft') this.move(-1);
+        if (e.key === 'ArrowRight') this.move(1);
+        if (e.key === 'ArrowDown') this.drop();
+        if (e.key === 'ArrowUp') this.rotate();
+    }
+
+    _handleTouchStart(e) {
+        if (this.isGameOver) return;
+        const touch = e.touches[0];
+        this.touchStartX = touch.clientX;
+        this.touchStartY = touch.clientY;
+        this.touchStartTime = Date.now();
+        e.preventDefault();
+    }
+
+    _handleTouchEnd(e) {
+        if (this.isGameOver) return;
+        const touch = e.changedTouches[0];
+        const dx = touch.clientX - this.touchStartX;
+        const dy = touch.clientY - this.touchStartY;
+        const dt = Date.now() - this.touchStartTime;
         const minSwipe = 30; // Minimum swipe mesafesi (px)
 
-        this.canvas.addEventListener('touchstart', (e) => {
-            if (this.isGameOver) return;
-            const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-            touchStartTime = Date.now();
-            e.preventDefault();
-        }, { passive: false });
+        // Hızlı dokunma = döndür
+        if (Math.abs(dx) < minSwipe && Math.abs(dy) < minSwipe && dt < 200) {
+            this.rotate();
+            return;
+        }
 
-        this.canvas.addEventListener('touchend', (e) => {
-            if (this.isGameOver) return;
-            const touch = e.changedTouches[0];
-            const dx = touch.clientX - touchStartX;
-            const dy = touch.clientY - touchStartY;
-            const dt = Date.now() - touchStartTime;
-
-            // Hızlı dokunma = döndür
-            if (Math.abs(dx) < minSwipe && Math.abs(dy) < minSwipe && dt < 200) {
-                this.rotate();
-                return;
-            }
-
-            // Yatay kaydırma → sola/sağa
-            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > minSwipe) {
-                this.move(dx > 0 ? 1 : -1);
-            }
-            // Dikey kaydırma aşağı → hızlı düşür
-            else if (dy > minSwipe) {
-                this.drop();
-            }
-            e.preventDefault();
-        }, { passive: false });
+        // Yatay kaydırma → sola/sağa
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > minSwipe) {
+            this.move(dx > 0 ? 1 : -1);
+        }
+        // Dikey kaydırma aşağı → hızlı düşür
+        else if (dy > minSwipe) {
+            this.drop();
+        }
+        e.preventDefault();
     }
 
     update(time = 0) {
@@ -319,6 +331,32 @@ class TetrisGame {
         this.dropCounter += deltaTime;
         if (this.dropCounter > this.dropInterval) this.drop();
         this.draw();
-        requestAnimationFrame((t) => this.update(t));
+        this.animationFrameId = requestAnimationFrame((t) => this.update(t));
+    }
+
+    forceEnd() {
+        this.isGameOver = true;
+        
+        // Listener'ları temizle
+        if (this._keydownHandler) {
+            document.removeEventListener('keydown', this._keydownHandler);
+            this._keydownHandler = null;
+        }
+        if (this._touchStartHandler) {
+            this.canvas.removeEventListener('touchstart', this._touchStartHandler);
+            this._touchStartHandler = null;
+        }
+        if (this._touchEndHandler) {
+            this.canvas.removeEventListener('touchend', this._touchEndHandler);
+            this._touchEndHandler = null;
+        }
+
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+        // Temizle ki iç içe geçmesin
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.oppCtx.clearRect(0, 0, this.oppCanvas.width, this.oppCanvas.height);
     }
 }

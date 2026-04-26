@@ -390,31 +390,36 @@ class PrivateCallClient {
     }
 
     _initListeners() {
-        // Sızıntı önleme
         if (this._listenersAttached) return;
         this._listenersAttached = true;
 
-        this.socket.on('private_call_signal', async (data) => {
-            if(!this.targetId || this.targetId !== data.senderId) return;
-            const signal = data.signal;
-            try {
-                if(signal.type === 'offer') {
-                    if (!this.pc) this._createPC();
-                    await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
-                    const answer = await this.pc.createAnswer();
-                    await this.pc.setLocalDescription(answer);
-                    this.socket.emit('private_call_signal', { targetId: this.targetId, signal: this.pc.localDescription });
-                } else if(signal.type === 'answer') {
-                    await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
-                } else if(signal.candidate) {
-                    await this.pc.addIceCandidate(new RTCIceCandidate(signal));
+        this._boundListeners = {
+            onSignal: async (data) => {
+                if(!this.targetId || this.targetId !== data.senderId) return;
+                const signal = data.signal;
+                try {
+                    if(signal.type === 'offer') {
+                        if (!this.pc) this._createPC();
+                        await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
+                        const answer = await this.pc.createAnswer();
+                        await this.pc.setLocalDescription(answer);
+                        this.socket.emit('private_call_signal', { targetId: this.targetId, signal: this.pc.localDescription });
+                    } else if(signal.type === 'answer') {
+                        await this.pc.setRemoteDescription(new RTCSessionDescription(signal));
+                    } else if(signal.candidate) {
+                        await this.pc.addIceCandidate(new RTCIceCandidate(signal));
+                    }
+                } catch(e) {
+                    console.error("Private call signal error:", e);
                 }
-            } catch(e) {
-                console.error("Private call signal error:", e);
-            }
-        });
-        this.socket.on('private_call_finished', () => this.stop(false));
-        this.socket.on('private_call_rejected', () => { alert("Arama reddedildi."); this.stop(false); });
+            },
+            onFinished: () => this.stop(false),
+            onRejected: () => { alert("Arama reddedildi."); this.stop(false); }
+        };
+
+        this.socket.on('private_call_signal', this._boundListeners.onSignal);
+        this.socket.on('private_call_finished', this._boundListeners.onFinished);
+        this.socket.on('private_call_rejected', this._boundListeners.onRejected);
     }
 
     /**
@@ -474,6 +479,15 @@ class PrivateCallClient {
 
     stop(notify = true) {
         if(notify && this.targetId) this.socket.emit('private_call_hangup', { targetId: this.targetId });
+        
+        // Listener'ları temizle
+        if (this._boundListeners) {
+            this.socket.off('private_call_signal', this._boundListeners.onSignal);
+            this.socket.off('private_call_finished', this._boundListeners.onFinished);
+            this.socket.off('private_call_rejected', this._boundListeners.onRejected);
+            this._listenersAttached = false;
+        }
+
         if(this.pc) { this.pc.close(); this.pc = null; }
         if(this.localStream) this.localStream.getTracks().forEach(t => t.stop());
         if(this.localVideo) this.localVideo.srcObject = null;
