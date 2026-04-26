@@ -229,7 +229,8 @@ class TetrisGame {
         this.nextPiece = this.createPiece();
         if (this.collide()) {
             this.isGameOver = true;
-            alert("OYUN BİTTİ! Skorun: " + this.score);
+            console.log("🎮 OYUN BİTTİ! Skorun: " + this.score);
+            // UX Notu: alert() yerine burada özel bir modal tetiklenebilir.
         }
     }
 

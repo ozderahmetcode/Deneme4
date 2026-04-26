@@ -18,7 +18,7 @@ const MatchmakerService = {
     async handleFindMatch(socket, data) {
         // Artik veriler istemciden (data) degil, Token'dan (socket.decoded) geliyor.
         const user = socket.decoded;
-        console.log(`🔍 [Service] GUVENLI Arama: ${user.username} (ID: ${user.id})`);
+        console.log(`🔍 [Service] Eşleşme aranıyor... (Kullanıcı maskelendi)`);
 
         // 1. VIP/Kredi Kontrolü (Sunucu Taraflı - Veritabanı Doğrulaması)
         // Kullanıcının güncel altın miktarını DB'den çekiyoruz

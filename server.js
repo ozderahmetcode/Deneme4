@@ -21,10 +21,27 @@ const crypto = require('crypto');
 // --- Modül İmportları ---
 const setupSignaling = require('./signaling');
 const MatchmakerService = require('./matchmaker_service_');
-const { pool, initDB, UserRepository } = require('./database');
+const { initDB, UserRepository } = require('./database');
+
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
+
+// Güvenlik Middleware'leri
+app.use(helmet()); // Güvenlik başlıkları (HSTS dahil)
+app.use(cors());   // CORS politikası
+
+// HTTP Rate Limit (Brute-force koruması)
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 dakika
+    max: 100, // IP başına limit
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api/', limiter);
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : (process.env.NODE_ENV === 'production' ? false : '*');
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
@@ -455,10 +472,14 @@ io.on('connection', (socket) => {
     // --- FRIEND SYSTEM ---
     socket.on('friend_request', (data) => {
         if (!data || !data.targetId) return;
+        
+        // Güvenlik: Gönderen bilgileri istemciden değil, doğrulanmış Token'dan alınır
+        const decodedUser = socket.decoded;
+        
         io.to(data.targetId).emit('friend_request_received', {
             senderId: socket.id,
-            senderName: data.senderName,
-            senderAvatar: data.senderAvatar
+            senderName: decodedUser.username,
+            senderAvatar: decodedUser.avatarUrl || ''
         });
     });
 
@@ -472,7 +493,7 @@ io.on('connection', (socket) => {
         const decodedUser = socket.decoded;
         if (decodedUser) {
             clearUserFromAllRooms(decodedUser.id, socket);
-            console.log(`❌ [Zırhlı] Koptu: ${decodedUser.username} (${socket.id})`);
+            console.log(`❌ [Zırhlı] Kullanıcı bağlantısı koptu. (ID: ${socket.id})`);
         } else {
             console.log('❌ [Zırhlı] Koptu (Bilinmeyen):', socket.id);
         }
