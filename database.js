@@ -135,7 +135,7 @@ async function initDB() {
 const UserRepository = {
     async createUser(userData) {
         if (!isDBConnected) {
-            console.log(`[Mock DB] Kullanıcı oluşturuldu: ${userData.username}`);
+            console.log(`[Mock DB] Yeni kullanıcı oluşturuldu. (İsim maskelendi)`);
             return { id: `mock_${Date.now()}`, ...userData, gold_balance: 100 };
         }
         const res = await pool.query(

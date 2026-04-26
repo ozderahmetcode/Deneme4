@@ -17,16 +17,19 @@ function setupSignaling(io) {
             // --- 1-ON-1 WEBRTC SIGNALING ---
             socket.on("webrtc_offer", (p) => {
                 if (!p || !p.targetId) return;
+                if (p.targetId !== socket.matchedPeerId) return; // Güvenlik: Yetkisiz Sinyal Engelleme
                 io.to(p.targetId).emit("webrtc_offer", { senderId: socket.id, sdp: p.sdp });
             });
 
             socket.on("webrtc_answer", (p) => {
                 if (!p || !p.targetId) return;
+                if (p.targetId !== socket.matchedPeerId) return;
                 io.to(p.targetId).emit("webrtc_answer", { senderId: socket.id, sdp: p.sdp });
             });
 
             socket.on("webrtc_ice_candidate", (p) => {
                 if (!p || !p.targetId) return;
+                if (p.targetId !== socket.matchedPeerId) return;
                 io.to(p.targetId).emit("webrtc_ice_candidate", { senderId: socket.id, candidate: p.candidate });
             });
 
@@ -54,16 +57,18 @@ function setupSignaling(io) {
             // --- PRIVATE CALL SIGNALING (DM) ---
             socket.on('private_call_init', (data) => {
                 if (!data || !data.targetId) return;
-                io.to(data.targetId).emit('private_call_incoming', {
-                    callerId: socket.id,
-                    type: data.type,
-                    callerName: data.callerName,
-                    callerAvatar: data.callerAvatar
-                });
+            const decodedUser = socket.decoded;
+            io.to(data.targetId).emit('private_call_incoming', {
+                callerId: socket.id,
+                type: data.type,
+                callerName: decodedUser.username,
+                callerAvatar: decodedUser.avatarUrl || ''
+            });
             });
 
             socket.on('private_call_signal', (data) => {
                 if (!data || !data.targetId) return;
+                if (data.targetId !== socket.matchedPeerId) return;
                 io.to(data.targetId).emit('private_call_signal', {
                     senderId: socket.id,
                     signal: data.signal
@@ -72,22 +77,26 @@ function setupSignaling(io) {
 
             socket.on('private_call_reject', (data) => {
                 if (!data || !data.targetId) return;
+                if (data.targetId !== socket.matchedPeerId) return;
                 io.to(data.targetId).emit('private_call_rejected', { senderId: socket.id });
             });
 
             socket.on('private_call_hangup', (data) => {
                 if (!data || !data.targetId) return;
+                if (data.targetId !== socket.matchedPeerId) return;
                 io.to(data.targetId).emit('private_call_finished', { senderId: socket.id });
             });
 
             // --- GAME SIGNALING ---
             socket.on('game_move', (p) => {
                 if (!p || !p.targetId) return;
+                if (p.targetId !== socket.matchedPeerId) return;
                 io.to(p.targetId).emit('game_move', { senderId: socket.id, moveData: p.moveData });
             });
 
             socket.on('game_score', (p) => {
                 if (!p || !p.targetId) return;
+                if (p.targetId !== socket.matchedPeerId) return;
                 io.to(p.targetId).emit('game_score', { senderId: socket.id, score: p.score });
             });
 
@@ -101,6 +110,10 @@ function setupSignaling(io) {
                     console.warn(`⚠️ [Güvenlik] Aşırı büyük DM engellendi. Gönderen: ${socket.id}`);
                     return;
                 }
+
+                // Madde 4: Photo/Audio için spesifik dize limitleri (Örn. 500KB)
+                if (data.photoData && data.photoData.length > 700000) return; // Base64 ~500KB
+                if (data.audioData && data.audioData.length > 700000) return;
 
                 io.to(data.targetId).emit('receive_message', {
                     text: data.text ? String(data.text).substring(0, 1000) : '',

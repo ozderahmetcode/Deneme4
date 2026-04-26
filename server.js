@@ -32,7 +32,7 @@ const server = http.createServer(app);
 
 // Güvenlik Middleware'leri
 app.use(helmet()); // Güvenlik başlıkları (HSTS dahil)
-app.use(cors());   // CORS politikası
+app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true })); // Sıkılaştırılmış CORS politikası
 
 // HTTP Rate Limit (Brute-force koruması)
 const limiter = rateLimit({
@@ -69,13 +69,13 @@ app.get('/health', (req, res) => {
 // Şifre Hashleme Yardımcıları
 function hashPassword(password) {
     const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    const hash = crypto.pbkdf2Sync(password, salt, 210000, 64, 'sha512').toString('hex');
     return `${salt}:${hash}`;
 }
 
 function verifyPassword(password, storedHash) {
     const [salt, key] = storedHash.split(':');
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    const hash = crypto.pbkdf2Sync(password, salt, 210000, 64, 'sha512').toString('hex');
     return key === hash;
 }
 
@@ -354,7 +354,7 @@ io.on('connection', (socket) => {
 
     // --- SMART MATCHING (MatchmakerService entegrasyonu) ---
     socket.on('find_match', async (data) => {
-        if (!checkRateLimit(socket.id)) {
+        if (!checkRateLimit(socket)) {
             socket.emit('rate_limited', { msg: 'Çok hızlı istek gönderiyorsunuz. Lütfen bekleyin.' });
             return;
         }
@@ -362,9 +362,16 @@ io.on('connection', (socket) => {
         const result = await MatchmakerService.handleFindMatch(socket, data);
         
         if (result && result.matched) {
-            // User2'ye bildir (User1'e MatchmakerService içinden zaten bildirildi)
-            io.to(result.targetSocketId).emit('match_found', result.payload);
-            console.log(`🎉 EŞLEŞME! ${socket.id} <-> ${result.targetSocketId}`);
+            // Güvenlik: Sinyalleşme yetkilendirmesi için eşleşme kaydı
+            const opponentSocket = io.sockets.sockets.get(result.targetSocketId);
+            if (opponentSocket) {
+                socket.matchedPeerId = result.targetSocketId;
+                opponentSocket.matchedPeerId = socket.id;
+                
+                // User2'ye bildir
+                opponentSocket.emit('match_found', result.payload);
+                console.log(`🎉 EŞLEŞME! ${socket.id} <-> ${result.targetSocketId}`);
+            }
         } else {
             console.log('🛌 Kuyruğa alındı:', socket.id);
         }
@@ -389,6 +396,14 @@ io.on('connection', (socket) => {
                 } else {
                     io.to(socket.id).emit('game_match_found', { opponentId, gameId, role: 'caller' });
                     io.to(opponentId).emit('game_match_found', { opponentId: socket.id, gameId, role: 'callee' });
+                    
+                    // Güvenlik: Sinyalleşme yetkilendirmesi
+                    const opponentSocket = io.sockets.sockets.get(opponentId);
+                    if (opponentSocket) {
+                        socket.matchedPeerId = opponentId;
+                        opponentSocket.matchedPeerId = socket.id;
+                    }
+
                     gameWaitingPools[gameId] = null;
                     activeGameCounts[gameId]++;
                     
@@ -461,7 +476,7 @@ io.on('connection', (socket) => {
         
         io.to(data.roomId).emit('receive_room_message', { 
             text: safeText, 
-            username: data.username, 
+            username: socket.decoded.username, 
             senderId: socket.id,
             msgId: data.msgId 
         });
@@ -496,6 +511,13 @@ io.on('connection', (socket) => {
             console.log(`❌ [Zırhlı] Kullanıcı bağlantısı koptu. (ID: ${socket.id})`);
         } else {
             console.log('❌ [Zırhlı] Koptu (Bilinmeyen):', socket.id);
+        }
+
+        // Güvenlik: Eşleşme bilgisini temizle
+        if (socket.matchedPeerId) {
+            const peer = io.sockets.sockets.get(socket.matchedPeerId);
+            if (peer) delete peer.matchedPeerId;
+            delete socket.matchedPeerId;
         }
 
         // MatchmakerService havuz temizliği (tek havuz)
@@ -549,6 +571,8 @@ async function startServer() {
         console.log('======================================================\n');
         console.log(`💻 Port: ${PORT}`);
         console.log(`🏥 Health: http://localhost:${PORT}/health`);
+        console.log('🔒 HTTPS Notu: Render/Heroku üzerinde TLS otomatik sağlanır.');
+        console.log('   Yerel testlerde mikrofon izni için "localhost" kullanın veya HTTPS proxy kurun.');
         console.log('======================================================\n');
     });
 }
