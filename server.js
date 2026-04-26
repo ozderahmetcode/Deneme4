@@ -310,7 +310,7 @@ function isValidUrl(url) {
     if (!url) return false;
     try {
         const parsed = new URL(url);
-        if (parsed.protocol !== 'http:' \u0026\u0026 parsed.protocol !== 'https:') return false;
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
         
         const host = parsed.hostname.toLowerCase();
         // Lokal ve internal IP bloklarını engelle (SSRF Koruması)
