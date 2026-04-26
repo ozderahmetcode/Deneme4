@@ -44,7 +44,8 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
             imgSrc: ["'self'", "data:", "https://api.dicebear.com", "https://assets.mixkit.co"],
-            connectSrc: ["'self'", "wss:", "https:", "https://cdn.socket.io"],
+            connectSrc: ["'self'", "wss:", "https:", "https://cdn.socket.io", "*.streamtheworld.com", "*.musicradio.com"], // Madde 29
+            mediaSrc: ["'self'", "blob:", "data:", "*.streamtheworld.com", "*.musicradio.com"], // Madde 29
             frameAncestors: ["'none'"], // Madde 17: Clickjacking Koruması
             objectSrc: ["'none'"],
             upgradeInsecureRequests: [],
@@ -128,7 +129,7 @@ app.post('/api/auth/register', async (req, res) => {
         const passwordHash = hashPassword(password);
         const newUser = await UserRepository.createUser({
             username,
-            password: passwordHash,
+            password_hash: passwordHash,
             age: age || null,
             gender: gender || null,
             region: region || null,
@@ -169,8 +170,9 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(400).json({ success: false, error: "Kullanıcı adı ve şifre gereklidir." });
     }
 
-    // Madde 19: Hesap Bazlı Brute-Force Koruması
-    const attempt = loginAttempts.get(username) || { count: 0, lockUntil: 0 };
+    // Madde 26: Lockout DoS Koruması (IP + Username bazlı kilit)
+    const lockKey = `${req.ip}_${username}`;
+    const attempt = loginAttempts.get(lockKey) || { count: 0, lockUntil: 0 };
     if (Date.now() < attempt.lockUntil) {
         const remainingMin = Math.ceil((attempt.lockUntil - Date.now()) / 60000);
         return res.status(429).json({ success: false, error: `Çok fazla başarısız deneme. Lütfen ${remainingMin} dakika bekleyin.` });
@@ -179,19 +181,18 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const user = await UserRepository.getUserByUsername(username);
         if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
-            console.warn(`🚨 [Audit] Başarısız Giriş Denemesi: ${username} (IP: ${req.ip})`);
+            console.warn(`🚨 [Audit] Başarısız Giriş: ${username} (IP: ${req.ip})`);
             attempt.count++;
             if (attempt.count >= 5) {
-                console.warn(`🚨 [Audit] Hesap Kilitlendi: ${username} (Brute-force şüphesi)`);
-                attempt.lockUntil = Date.now() + 5 * 60000; // 5 dakika kilit
+                attempt.lockUntil = Date.now() + 5 * 60000;
                 attempt.count = 0;
             }
-            loginAttempts.set(username, attempt);
+            loginAttempts.set(lockKey, attempt);
             return res.status(401).json({ success: false, error: "Hatalı kullanıcı adı veya şifre." });
         }
 
         // Başarılı giriş: Denemeleri sıfırla
-        loginAttempts.delete(username);
+        loginAttempts.delete(lockKey);
 
         const userPayload = { 
             id: user.id,
@@ -236,9 +237,8 @@ const RATE_LIMIT = { maxRequests: 30, windowMs: 10000 }; // 30 istek / 10 saniye
 
 function checkRateLimit(socket) {
     const now = Date.now();
-    // Güvenlik: Proxy güveni sonrası gerçek IP ve Kullanıcı ID birleşimi (Madde 13)
-    const clientIp = socket.handshake.address; 
-    const userId = socket.decoded ? socket.decoded.id : 'anon';
+    // Güvenlik: Proxy güveni sonrası gerçek IP (Madde 25)
+    const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;     const userId = socket.decoded ? socket.decoded.id : 'anon';
     const limitKey = `${userId}_${clientIp}`;
     
     let entry = rateLimitMap.get(limitKey);

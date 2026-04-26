@@ -139,14 +139,15 @@ async function initDB() {
 const UserRepository = {
     async createUser(userData) {
         if (!isDBConnected) {
-            console.log(`[Mock DB] Yeni kullanıcı oluşturuldu. (İsim maskelendi)`);
+            console.log(`[Mock DB] Yeni kullanıcı oluşturuldu.`);
             return { id: `mock_${Date.now()}`, ...userData, gold_balance: 100 };
         }
+        // Madde 28: Naming confusion fix (password_hash)
         const res = await pool.query(
             `INSERT INTO users (username, password_hash, age, gender, region, avatar_url, zodiac) 
              VALUES ($1, $2, $3, $4, $5, $6, $7) 
              RETURNING *`,
-            [userData.username, userData.password, userData.age, userData.gender, userData.region, userData.avatarUrl, userData.zodiac]
+            [userData.username, userData.password_hash || userData.password, userData.age, userData.gender, userData.region, userData.avatarUrl, userData.zodiac]
         );
         return res.rows[0];
     },
