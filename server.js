@@ -269,12 +269,20 @@ function sanitizeString(str) {
         .replace(/'/g, '&#39;');
 }
 
-// SSRF / Zararlı Link Koruması
+// SSRF / Zararlı Link Koruması (Madde 11: Hardened)
 function isValidUrl(url) {
     if (!url) return false;
     try {
         const parsed = new URL(url);
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        if (parsed.protocol !== 'http:' \u0026\u0026 parsed.protocol !== 'https:') return false;
+        
+        const host = parsed.hostname.toLowerCase();
+        // Lokal ve internal IP bloklarını engelle (SSRF Koruması)
+        const blacklisted = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254'];
+        if (blacklisted.includes(host)) return false;
+        if (host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('172.')) return false;
+        
+        return true;
     } catch (e) {
         return false;
     }
@@ -429,6 +437,7 @@ io.on('connection', (socket) => {
         const def = roomDefs[roomId];
         if (!def) return;
 
+        // 1. VIP/Kredi Kontrolü (Sunucu Taraflı - Veritabanı Doğrulaması)
         // VIP check (Güvenli DB Sorgusu)
         let userGold = 0;
         try {

@@ -21,28 +21,27 @@ const MatchmakerService = {
         console.log(`🔍 [Service] Eşleşme aranıyor... (Kullanıcı maskelendi)`);
 
         // 1. VIP/Kredi Kontrolü (Sunucu Taraflı - Veritabanı Doğrulaması)
-        // Kullanıcının güncel altın miktarını DB'den çekiyoruz
-        let userGold = 0;
+        // Madde 9 Fix: Token verisi eski olabilir, taze veriyi DB'den çekiyoruz
+        let dbUser = null;
         try {
-            // Mock mode olsa bile UserRepository güvenli veri döner
-            const dbUser = await UserRepository.getUserById(user.id); 
-            userGold = dbUser ? dbUser.gold_balance : 100; // Default 100
+            dbUser = await UserRepository.getUserById(user.id);
         } catch (e) {
-            userGold = user.gold || 100;
+            console.error("Matchmaker DB Error:", e);
         }
         
+        const userGold = dbUser ? dbUser.gold_balance : 100;
         const isVIP = userGold >= 500;
 
         // 2. Havuzuna Ekle (Manipülasyona kapalı veri seti)
         const matchResult = MatchmakingEngine.addToQueue({
             socketId: socket.id,
             userId: user.id,
-            username: user.username,
-            gender: user.gender,
-            region: user.region,
-            preference: data.preference, // Tercih istemci tarafından seçilebilir
+            username: dbUser ? dbUser.username : user.username,
+            gender: dbUser ? dbUser.gender : 'unknown',
+            region: dbUser ? dbUser.region : 'Global',
+            preference: data.preference, 
             regionFilter: data.regionFilter,
-            age: user.age,
+            age: dbUser ? dbUser.age : 18,
             isVIP: isVIP
         });
 

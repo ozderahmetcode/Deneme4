@@ -193,6 +193,9 @@ const UserRepository = {
             'INSERT INTO matches (user1_id, user2_id, duration_seconds) VALUES ($1, $2, $3)',
             [user1Id, user2Id, durationSeconds]
         );
+        // Madde 10: Başarılı eşleşme ödülü (Sunucu tarafı güvenli gold kazanımı)
+        await this.updateGoldBalance(user1Id, 5, 'Match Reward');
+        await this.updateGoldBalance(user2Id, 5, 'Match Reward');
     },
 
     async addFriend(userId, friendId) {
