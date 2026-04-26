@@ -39,7 +39,8 @@ const MatchmakerService = {
             username: dbUser ? dbUser.username : user.username,
             gender: dbUser ? dbUser.gender : 'unknown',
             region: dbUser ? dbUser.region : 'Global',
-            preference: data.preference, 
+            // Madde 6 Fix: Veritabanındaki kalıcı tercihi kullan (Eğer istemci boş gönderirse)
+            preference: data.preference || (dbUser ? dbUser.match_preference : 'mixed'), 
             regionFilter: data.regionFilter,
             age: dbUser ? dbUser.age : 18,
             isVIP: isVIP

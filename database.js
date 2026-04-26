@@ -71,6 +71,9 @@ async function initDB() {
             );
         `);
 
+        // Madde 6: Match Preference Kolonu Ekle (Mevcut tabloları bozmadan güncelle)
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS match_preference VARCHAR(20) DEFAULT 'mixed';`);
+
         // Eşleşme geçmişi
         await client.query(`
             CREATE TABLE IF NOT EXISTS matches (
@@ -223,8 +226,8 @@ const UserRepository = {
     },
     async updateUserPreference(userId, preference) {
         if (!isDBConnected) return;
-        // Madde 16: Kullanıcı tercihini bölge alanında veya özel bir kolonda sakla
-        await pool.query('UPDATE users SET region = $1 WHERE id = $2', [preference, userId]);
+        // Madde 6 Fix: 'region' kolonu yerine 'match_preference' kolonuna yaz
+        await pool.query('UPDATE users SET match_preference = $1 WHERE id = $2', [preference, userId]);
     }
 };
 
