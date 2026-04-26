@@ -342,10 +342,20 @@ function updateStatsUI() {
     } catch(e) { console.log("Stats UI Update Error:", e); }
 }
 
-let usersDB = JSON.parse(localStorage.getItem('ozderUsers')) || {};
-let currentUser = JSON.parse(localStorage.getItem('ozderSession')) || null;
-let liteMode = JSON.parse(localStorage.getItem('ozderLiteMode')) || false;
-let stats = (currentUser && currentUser.username) ? (JSON.parse(localStorage.getItem(currentUser.username + '_stats')) || { totalCalls: 0, talkTimeSeconds: 0, likes: 0, dislikes: 0, skips: 0, reports: 0, callsDone: 0 }) : null;
+function safeParseJSON(key, fallback) {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : fallback;
+    } catch (e) {
+        console.warn(`JSON Parse hatası (${key}), varsayılan değere dönülüyor:`, e);
+        return fallback;
+    }
+}
+
+let usersDB = safeParseJSON('ozderUsers', {});
+let currentUser = safeParseJSON('ozderSession', null);
+let liteMode = safeParseJSON('ozderLiteMode', false);
+let stats = (currentUser && currentUser.username) ? safeParseJSON(currentUser.username + '_stats', { totalCalls: 0, talkTimeSeconds: 0, likes: 0, dislikes: 0, skips: 0, reports: 0, callsDone: 0 }) : null;
 let statsChart = null;
 let authScreen, screensContainer, mainNav;
 
@@ -630,7 +640,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const srvUrl = (window.location.protocol === 'file:') ? 'http://localhost:3000' : window.location.origin;
 
     async function ensureAuth() {
-        let session = JSON.parse(localStorage.getItem('ozderSession'));
+        let session = safeParseJSON('ozderSession', null);
         let token = localStorage.getItem('ozderToken');
 
         if (!token || !session) {
@@ -744,14 +754,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             onUserLeft: (data) => {
                 // webrtc_client.js handle's the removal, we update UI
                 updateParticipantsUI();
-            }
-        });
-        // Mesaj Alma (Soket üzerinden)
-        globalSocket.on('receive_message', (data) => {
-            const container = document.getElementById('chat-messages-container');
-            if (container) {
-                container.innerHTML += `<div class="chat-bubble them"><span>${escapeHtml(data.text)}</span></div>`;
-                container.scrollTop = container.scrollHeight;
             }
         });
 
@@ -938,28 +940,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.warn("💎 VIP gerekli!");
             alert("💎 Burası sadece VIP kulübüne özel kanki! Girmek için en az 500 altına ihtiyacın var.");
             if (window.leaveRoom) window.leaveRoom();
-        });
-
-        // --- GAME EVENTS (New v5) ---
-        globalSocket.on('game_match_found', (data) => {
-            console.log("🎮 Oyun eşleşmesi bulundu!", data);
-            initGameSession(data);
-        });
-
-        globalSocket.on('game_move', (data) => {
-            if (activeGameXOX && currentGameData.gameId === 'xox') {
-                const oppSym = (activeGameXOX.mySymbol === 'X') ? 'O' : 'X';
-                activeGameXOX.makeMove(data.moveData, oppSym);
-            }
-        });
-
-        globalSocket.on('game_score', (data) => {
-            // scores: { X, O }
-            const scores = data.score;
-            const mySym = activeGameXOX.mySymbol;
-            const oppSym = (mySym === 'X') ? 'O' : 'X';
-            document.getElementById('my-game-score').innerText = scores[mySym];
-            document.getElementById('opp-game-score').innerText = scores[oppSym];
         });
 
         globalSocket.on('games_info_update', (gamesInfo) => {
