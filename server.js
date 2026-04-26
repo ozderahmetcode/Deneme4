@@ -145,16 +145,18 @@ io.use((socket, next) => {
 });
 
 // ==================== RATE LIMITING ====================
-const rateLimitMap = new Map(); // socketId → { count, resetTime }
+const rateLimitMap = new Map(); // clientIp → { count, resetTime }
 const RATE_LIMIT = { maxRequests: 30, windowMs: 10000 }; // 30 istek / 10 saniye
 
-function checkRateLimit(socketId) {
+function checkRateLimit(socket) {
     const now = Date.now();
-    let entry = rateLimitMap.get(socketId);
+    // Güvenlik: Socket.id yerine gerçek İstemci IP adresi kullanılır
+    const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address || socket.id;
+    let entry = rateLimitMap.get(clientIp);
     
     if (!entry || now > entry.resetTime) {
         entry = { count: 0, resetTime: now + RATE_LIMIT.windowMs };
-        rateLimitMap.set(socketId, entry);
+        rateLimitMap.set(clientIp, entry);
     }
     
     entry.count++;
@@ -228,6 +230,27 @@ const gameWaitingPools = { 'xox': null, 'tetris': null };
 const activeGameCounts = { 'xox': 0, 'tetris': 0 };
 
 // ==================== HELPER FUNCTIONS ====================
+// XSS Koruması
+function sanitizeString(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// SSRF / Zararlı Link Koruması
+function isValidUrl(url) {
+    if (!url) return false;
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+        return false;
+    }
+}
 function getRoomsData() {
     const info = {};
     for (const id in roomDefs) {
@@ -323,7 +346,7 @@ io.on('connection', (socket) => {
     const gameMatchLocks = {};
 
     socket.on('find_game_match', (data) => {
-        if (!checkRateLimit(socket.id)) return;
+        if (!checkRateLimit(socket)) return;
 
         const gameId = data.gameId;
         if (gameMatchLocks[gameId]) return; // Race Condition kilidi
@@ -356,7 +379,7 @@ io.on('connection', (socket) => {
 
     // --- ROOMS ---
     socket.on('join_room', async (data) => {
-        if (!checkRateLimit(socket.id)) return;
+        if (!checkRateLimit(socket)) return;
         
         const { roomId, username, avatarUrl } = data;
         const decodedUser = socket.decoded;
@@ -385,11 +408,12 @@ io.on('connection', (socket) => {
             return;
         }
         
+        const finalAvatar = isValidUrl(data.avatarUrl) ? sanitizeString(data.avatarUrl) : '';
         const user = { 
             id: socket.id, 
             userId: decodedUser.id, 
             username: decodedUser.username, 
-            avatarUrl: decodedUser.avatarUrl || avatarUrl 
+            avatarUrl: decodedUser.avatarUrl || finalAvatar 
         };
         
         rooms[roomId].push(user);
@@ -401,7 +425,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send_room_message', (data) => {
-        if (!checkRateLimit(socket.id)) return;
+        if (!checkRateLimit(socket)) return;
         if (!data || !data.roomId || !data.text) return;
         
         // Spam/DoS Koruması: Mesaj uzunluğu max 500 karakter
