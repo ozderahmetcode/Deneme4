@@ -41,6 +41,9 @@ async function initDB() {
         await client.query('BEGIN');
         console.log("📦 Veritabanı tabloları senkronize ediliyor...");
 
+        // UUID ve Crypto fonksiyonları için eklenti (PG < 13 uyumluluğu)
+        await client.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`);
+
         // Users tablosu — genişletilmiş şema
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (

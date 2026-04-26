@@ -132,15 +132,26 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// Socket.io Middleware: Her bağlantıda Token kontrolü
+// Socket.io Middleware: Her bağlantıda Token ve Ban kontrolü
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) return next(new Error("Authentication error: No token provided"));
     
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
         if (err) return next(new Error("Authentication error: Invalid token"));
-        socket.decoded = decoded;
-        next();
+        
+        try {
+            // Güvenlik (Token Revocation): Kullanıcının banlı olup olmadığını anlık kontrol et
+            const dbUser = await UserRepository.getUserById(decoded.id);
+            if (!dbUser) return next(new Error("Authentication error: User not found"));
+            if (dbUser.is_banned) return next(new Error("Authentication error: User is banned"));
+            
+            socket.decoded = decoded;
+            next();
+        } catch (dbErr) {
+            console.error("Token verification DB error:", dbErr);
+            next(new Error("Authentication error: Internal DB error"));
+        }
     });
 });
 
