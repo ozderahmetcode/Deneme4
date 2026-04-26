@@ -65,8 +65,11 @@ function verifyPassword(password, storedHash) {
 app.post('/api/auth/register', async (req, res) => {
     const { username, password, age, gender, region } = req.body;
     
-    if (!username || !password || username.length < 3 || password.length < 6) {
-        return res.status(400).json({ success: false, error: "Geçersiz kullanıcı adı veya şifre" });
+    // Güvenlik: Username sadece harf, rakam ve alt tire içerebilir. Max 20 karakter.
+    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+
+    if (!username || !password || !usernameRegex.test(username) || password.length < 6) {
+        return res.status(400).json({ success: false, error: "Geçersiz kullanıcı adı (3-20 karakter, harf/rakam) veya şifre (min 6)" });
     }
 
     try {
@@ -317,20 +320,37 @@ io.on('connection', (socket) => {
     });
 
     // --- GAME MATCHMAKING ---
+    const gameMatchLocks = {};
+
     socket.on('find_game_match', (data) => {
         if (!checkRateLimit(socket.id)) return;
 
         const gameId = data.gameId;
-        if (gameWaitingPools[gameId] && gameWaitingPools[gameId] !== socket.id) {
-            const opponentId = gameWaitingPools[gameId];
-            io.to(socket.id).emit('game_match_found', { opponentId, gameId, role: 'caller' });
-            io.to(opponentId).emit('game_match_found', { opponentId: socket.id, gameId, role: 'callee' });
-            gameWaitingPools[gameId] = null;
-            activeGameCounts[gameId]++;
+        if (gameMatchLocks[gameId]) return; // Race Condition kilidi
+        gameMatchLocks[gameId] = true;
+
+        try {
+            if (gameWaitingPools[gameId] && gameWaitingPools[gameId] !== socket.id) {
+                const opponentId = gameWaitingPools[gameId];
+                if (!io.sockets.sockets.has(opponentId)) {
+                    // Rakip kopmuş, yerine biz geçelim
+                    gameWaitingPools[gameId] = socket.id;
+                } else {
+                    io.to(socket.id).emit('game_match_found', { opponentId, gameId, role: 'caller' });
+                    io.to(opponentId).emit('game_match_found', { opponentId: socket.id, gameId, role: 'callee' });
+                    gameWaitingPools[gameId] = null;
+                    activeGameCounts[gameId]++;
+                    
+                    socket.activeGameId = gameId;
+                    const oppSocket = io.sockets.sockets.get(opponentId);
+                    if (oppSocket) oppSocket.activeGameId = gameId;
+                }
+            } else {
+                gameWaitingPools[gameId] = socket.id;
+            }
             broadcastGamesInfo();
-        } else {
-            gameWaitingPools[gameId] = socket.id;
-            broadcastGamesInfo();
+        } finally {
+            gameMatchLocks[gameId] = false;
         }
     });
 
@@ -382,10 +402,13 @@ io.on('connection', (socket) => {
 
     socket.on('send_room_message', (data) => {
         if (!checkRateLimit(socket.id)) return;
-        if (!data || !data.roomId) return;
+        if (!data || !data.roomId || !data.text) return;
+        
+        // Spam/DoS Koruması: Mesaj uzunluğu max 500 karakter
+        const safeText = String(data.text).substring(0, 500);
         
         io.to(data.roomId).emit('receive_room_message', { 
-            text: data.text, 
+            text: safeText, 
             username: data.username, 
             senderId: socket.id,
             msgId: data.msgId 
@@ -428,6 +451,12 @@ io.on('connection', (socket) => {
         for (const id in gameWaitingPools) {
             if (gameWaitingPools[id] === socket.id) gameWaitingPools[id] = null;
         }
+        
+        // Aktif oyun düşümü
+        if (socket.activeGameId && activeGameCounts[socket.activeGameId] > 0) {
+            activeGameCounts[socket.activeGameId]--;
+            broadcastGamesInfo();
+        }
 
         // Rate limit temizliği
         rateLimitMap.delete(socket.id);
@@ -438,7 +467,8 @@ io.on('connection', (socket) => {
 process.on('uncaughtException', (err) => {
     console.error('💥 [CRITICAL] Yakalanmamış Hata:', err.message);
     console.error(err.stack);
-    // Sunucu çökmesini engelle — loglayıp devam et
+    // Güvenlik: Bozuk state ile devam eden sunucu hack'lenebilir. Zorunlu çıkış yap.
+    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {

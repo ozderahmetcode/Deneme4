@@ -94,8 +94,16 @@ function setupSignaling(io) {
             // --- DM MESSAGING ---
             socket.on('send_message', (data) => {
                 if (!data || !data.targetId) return;
+                
+                // Güvenlik: Maksimum Payload Boyutu (Memory DoS Koruması - 2MB)
+                const payloadSize = JSON.stringify(data).length;
+                if (payloadSize > 2000000) {
+                    console.warn(`⚠️ [Güvenlik] Aşırı büyük DM engellendi. Gönderen: ${socket.id}`);
+                    return;
+                }
+
                 io.to(data.targetId).emit('receive_message', {
-                    text: data.text,
+                    text: data.text ? String(data.text).substring(0, 1000) : '',
                     senderId: socket.id,
                     type: data.type || 'text',
                     photoData: data.photoData,

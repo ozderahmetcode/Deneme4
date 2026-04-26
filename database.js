@@ -15,7 +15,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const connectionConfig = process.env.DATABASE_URL 
     ? {
         connectionString: process.env.DATABASE_URL,
-        ssl: isProduction ? { rejectUnauthorized: false } : false
+        ssl: isProduction ? { rejectUnauthorized: process.env.DB_SSL_STRICT === 'true' } : false
       }
     : {
         user: process.env.DB_USER || 'postgres',
