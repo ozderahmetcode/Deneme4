@@ -1473,10 +1473,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Keep existing static demo messages but prepend new friends
             const friendsHtml = currentUser.friends.map(f => `
-            <div class="message-item" onclick="openDirectChat('${f.name}', 'Merhaba!')">
-                <img src="${f.avatar}" alt="User">
+            <div class="message-item" onclick="openDirectChat('${escapeHtml(f.name).replace(/'/g, "\\'")}', 'Merhaba!')">
+                <img src="${isValidUrl(f.avatar) ? f.avatar : ''}" alt="User">
                 <div class="msg-content">
-                    <div class="msg-top"><h4>${f.name}</h4><span class="time">${f.lastSeen}</span></div>
+                    <div class="msg-top"><h4>${escapeHtml(f.name)}</h4><span class="time">${escapeHtml(f.lastSeen)}</span></div>
                     <p>Artık arkadaşsınız, selam de!</p>
                 </div>
             </div>
@@ -1807,27 +1807,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             container.scrollTop = container.scrollHeight;
         }
 
-        // --- EKSİK UI FONKSİYONLARI (ReferenceError Düzeltmeleri) ---
-        window.updateParticipantsUI = function () {
-            const grid = document.getElementById('room-participants-grid');
-            const countBadge = document.getElementById('room-users-count');
-            if (!grid) return;
-
-            grid.innerHTML = '';
-            const participants = window.activeRoomParticipants || [];
-
-            if (countBadge) countBadge.innerText = participants.length;
-
-            participants.forEach(user => {
-                const wrap = document.createElement('div');
-                wrap.className = 'participant-avatar-wrap';
-                wrap.innerHTML = `
-                    <img src="${user.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + user.username}" alt="${user.username}">
-                    <div class="participant-name">${user.username}</div>
-                `;
-                grid.appendChild(wrap);
-            });
-        }
+        // --- EKSİK UI FONKSİYONLARI ---
+        // window.updateParticipantsUI duplikatı silindi, line 809'daki güvenli versiyon kullanılmaktadır.
 
         window.updateGoldUI = function () {
             if (!currentUser) return;
@@ -2295,7 +2276,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 list.innerHTML += `
                     <div class="friend-card-premium">
                         <div class="f-info">
-                            <img src="${f.avatar}" class="f-avatar">
+                            <img src="${isValidUrl(f.avatar) ? f.avatar : ''}" class="f-avatar">
                             <div>
                                 <div class="f-name">${escapeHtml(f.username)}</div>
                                 <div class="f-trust"><i class="fa-solid fa-shield-halved"></i> Güven: ${f.trust || '98%'}</div>
