@@ -719,23 +719,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Madde 12 & 92 Fix: Çakışmayı önlemek için Timestamp + Random (Scaleable)
             const guestName = `User_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
             
-            const response = await fetch(`${srvUrl}/api/auth/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: guestName,
-                    password: guestPassword,
-                    age: 22,
-                    gender: 'belirtilmemiş',
-                    region: 'Türkiye'
-                })
-            });
-            const data = await response.json();
-            if (data.success) {
-                localStorage.setItem('ozderToken', data.token);
-                localStorage.setItem('ozderRefreshToken', data.refreshToken); // Madde 3 Fix: Kaydet
-                localStorage.setItem('ozderSession', JSON.stringify(data.user));
-                return data.token;
+            try {
+                const response = await fetch(`${srvUrl}/api/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: guestName,
+                        password: guestPassword,
+                        age: 22,
+                        gender: 'belirtilmemiş',
+                        region: 'Türkiye'
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    localStorage.setItem('ozderToken', data.token);
+                    localStorage.setItem('ozderRefreshToken', data.refreshToken);
+                    localStorage.setItem('ozderSession', JSON.stringify(data.user));
+                    return data.token;
+                }
+            } catch (e) {
+                console.warn("⚠️ Register failed, using fallback guest session:", e.message);
+                // Madde 109 Fix: Sunucuya ulaşılamazsa veya hata verirse uygulamayı kilitleme
+                return null;
             }
         }
         return token;

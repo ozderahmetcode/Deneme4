@@ -966,12 +966,13 @@ process.on('unhandledRejection', (reason, promise) => {
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
-    // Veritabanı bağlantısını dene (opsiyonel — bağlanamazsa devam et)
+    // Veritabanı bağlantısını dene (Madde 109 Fix: Render uyumlu esnek başlangıç)
     try {
         await initDB();
         console.log('✅ Veritabanı bağlantısı kuruldu.');
     } catch (err) {
-        console.warn('⚠️ Veritabanı bağlantısı kurulamadı (Hafıza modunda devam ediliyor):', err.message);
+        console.error('⚠️ [DB Error] Veritabanı bağlantısı kurulamadı:', err.message);
+        console.log('💡 [Info] Hafıza (In-Memory) modunda devam ediliyor...');
     }
 
     server.listen(PORT, '0.0.0.0', () => {
