@@ -27,7 +27,6 @@
   "overrides": {
     "body-parser": "2.2.2",
     "qs": "6.15.1",
-    "path-to-regexp": "8.4.2",
     "socket.io-parser": "4.2.6",
     "ws": "8.18.0"
   }
