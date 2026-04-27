@@ -35,15 +35,52 @@ const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
-const ALLOWED_ORIGINS = ['*']; // Madde 113 Fix: Acil durum serbest geçiş modu
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+    : '*'; // Production'da kendi origin'in ile çakışmaması için open default
+// NOT: Production'da güvenlik için Render dashboard'dan ALLOWED_ORIGINS env değişkenini ayarlayın
+// Örnek: ALLOWED_ORIGINS=https://deneme4-p5kx.onrender.com,https://senin-domain.com
 
 const app = express();
 app.set('trust proxy', 1); // Render/Heroku arkasındaki gerçek IP'yi tanı (Madde 12)
 const server = http.createServer(app);
 
 // Güvenlik Middleware'leri
-// app.use(helmet(...)); // Madde 113 Fix: Geçici olarak devre dışı (Hata tespiti için)
-app.use(cors({ origin: true, credentials: true })); // Tam serbest CORS
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.socket.io", "https://cdn.jsdelivr.net"],
+            scriptSrcAttr: ["'unsafe-inline'"], // Madde 108 Fix: Satır içi (onclick) JS'e izin ver
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+            imgSrc: ["'self'", "data:", "blob:", "https://api.dicebear.com", "https://assets.mixkit.co", "https://www.transparenttextures.com"], // Madde 108 Fix: UI dokuları eklendi
+            connectSrc: ["'self'", "wss:", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], 
+            mediaSrc: ["'self'", "blob:", "data:", "https://assets.mixkit.co", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 108 Fix: Medya kaynakları eklendi
+            frameAncestors: ["'none'"], 
+            objectSrc: ["'none'"],
+            upgradeInsecureRequests: [],
+        },
+    },
+    frameguard: { action: "deny" } // Madde 24 Fix: Modern Helmet uyumluluğu
+}));
+// CORS — '*' iken credentials true olamaz, dinamik origin kullan
+app.use(cors({ 
+    origin: (origin, callback) => {
+        // origin yok (mobile app, curl, same-origin) → izin ver
+        if (!origin) return callback(null, true);
+        // Wildcard mode
+        if (ALLOWED_ORIGINS === '*' || (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes('*'))) {
+            return callback(null, true);
+        }
+        // Whitelist mode
+        if (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes(origin)) {
+            return callback(null, true);
+        }
+        callback(new Error('CORS reddedildi: ' + origin));
+    },
+    credentials: true 
+}));
 
 // HTTP Rate Limit (Brute-force koruması)
 const limiter = rateLimit({
@@ -58,12 +95,26 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
+const io = new Server(server, { 
+    cors: { 
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+            if (ALLOWED_ORIGINS === '*' || (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes('*'))) {
+                return callback(null, true);
+            }
+            if (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes(origin)) {
+                return callback(null, true);
+            }
+            callback(new Error('Socket.io CORS reddedildi: ' + origin));
+        },
+        credentials: true
+    } 
+});
 
-let JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-    console.warn("⚠️ [Emergency] JWT_SECRET bulunamadı. Geçici anahtar üretiliyor...");
-    JWT_SECRET = "emergency_temp_key_998877";
+    console.error("❌ KRİTİK HATA: JWT_SECRET ortam değişkeni bulunamadı. Sunucu güvenliği için başlatılmıyor.");
+    process.exit(1);
 }
 
 // Madde 105 & 106 Fix: Render/Linux uyumlu statik dosya sunumu (Namespace Isolation)
@@ -947,13 +998,12 @@ process.on('unhandledRejection', (reason, promise) => {
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
-    // Veritabanı bağlantısını dene (Madde 109 Fix: Render uyumlu esnek başlangıç)
+    // Veritabanı bağlantısını dene (opsiyonel — bağlanamazsa devam et)
     try {
         await initDB();
         console.log('✅ Veritabanı bağlantısı kuruldu.');
     } catch (err) {
-        console.error('⚠️ [DB Error] Veritabanı bağlantısı kurulamadı:', err.message);
-        console.log('💡 [Info] Hafıza (In-Memory) modunda devam ediliyor...');
+        console.warn('⚠️ Veritabanı bağlantısı kurulamadı (Hafıza modunda devam ediliyor):', err.message);
     }
 
     server.listen(PORT, '0.0.0.0', () => {

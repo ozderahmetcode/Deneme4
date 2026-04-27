@@ -210,9 +210,9 @@ const UserRepository = {
                 avatar_url: ''
             };
         }
-        // Madde 25 & 81 Fix: Şema uyumlu kolon seçimi (gold -> gold_balance, reports_count silindi)
+        // Madde 25 & 81 Fix: Şema uyumlu kolon seçimi (gold -> gold_balance, reports_count silindi, zodiac eklendi)
         const res = await pool.query(
-            'SELECT id, username, avatar_url, gender, age, region, is_banned, match_preference, gold_balance, level, xp, is_vip FROM users WHERE id = $1', 
+            'SELECT id, username, avatar_url, gender, age, region, is_banned, match_preference, gold_balance, level, xp, is_vip, zodiac FROM users WHERE id = $1', 
             [userId]
         );
         return res.rows[0];
