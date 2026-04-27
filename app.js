@@ -65,6 +65,8 @@ let privateCallClient = null;
 let activeGameXOX = null;
 let gameTimerInterval = null;
 let currentGameData = null;
+// Madde Fix: matchingInterval global tanımı (eskiden eksikti, ReferenceError veriyordu)
+let matchingInterval = null;
 
 function showTab(targetId, isGoingBack = false) {
     if (typeof hideOverlays === "function") hideOverlays();
@@ -688,14 +690,48 @@ document.addEventListener('DOMContentLoaded', async () => {
                 localStorage.setItem('ozderRefreshToken', data.refreshToken);
                 return data.token;
             } else {
-                // Refresh başarısızsa temizle
-                localStorage.removeItem('ozderToken');
+                // Refresh başarısızsa SADECE refresh token sil (access token hâlâ geçerli olabilir)
                 localStorage.removeItem('ozderRefreshToken');
-                localStorage.removeItem('ozderSession');
                 return null;
             }
         } catch (e) {
-            console.error("Token refresh error:", e);
+            // Network hatası — token'ları silme, geçici sorun olabilir
+            console.warn("Token refresh network hatası (geçici):", e.message);
+            return null;
+        }
+    }
+
+    async function createGuestAccount() {
+        const array = new Uint8Array(16);
+        window.crypto.getRandomValues(array);
+        const guestPassword = Array.from(array, b => b.toString(16).padStart(2, '0')).join('') + 'A1!';
+        const guestName = `User_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+        
+        try {
+            const response = await fetch(`${srvUrl}/api/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: guestName,
+                    password: guestPassword,
+                    age: 22,
+                    gender: 'belirtilmemiş',
+                    region: 'Türkiye'
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                localStorage.setItem('ozderToken', data.token);
+                localStorage.setItem('ozderRefreshToken', data.refreshToken);
+                localStorage.setItem('ozderSession', JSON.stringify(data.user));
+                // Şifreyi de sakla ki kullanıcı sonra DB'den login olabilsin
+                localStorage.setItem('ozderGuestPwd', guestPassword);
+                return data.token;
+            }
+            console.error("Register başarısız:", data.error);
+            return null;
+        } catch (e) {
+            console.error("Register network hatası:", e.message);
             return null;
         }
     }
@@ -705,64 +741,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         let token = localStorage.getItem('ozderToken');
         let rToken = localStorage.getItem('ozderRefreshToken');
 
-        // Madde 3 Fix: Eğer token varsa ama sessizce yenilenebiliyorsa yenile
+        // Token + session zaten varsa direkt kullan, refresh denemesi YAPMA.
+        // Token'ın expired olup olmadığını socket bağlantısı kontrol edecek (connect_error).
+        // Bu sayede her F5'te DB'ye refresh isteği gitmiyor ve refresh token boşa yanmıyor.
+        if (token && session) {
+            return token;
+        }
+
+        // Token var ama session yok (eski versiyondan kalma) — refresh'e dene
         if (token && rToken) {
             const newToken = await refreshSession();
             if (newToken) return newToken;
         }
 
-        if (!token || !session) {
-            console.log("🔑 Yeni oturum oluşturuluyor...");
-            const array = new Uint8Array(16);
-            window.crypto.getRandomValues(array);
-            const guestPassword = Array.from(array, b => b.toString(16).padStart(2, '0')).join('') + 'A1!';
-            // Madde 12 & 92 Fix: Çakışmayı önlemek için Timestamp + Random (Scaleable)
-            const guestName = `User_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
-            
-            try {
-                const response = await fetch(`${srvUrl}/api/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: guestName,
-                        password: guestPassword,
-                        age: 22,
-                        gender: 'belirtilmemiş',
-                        region: 'Türkiye'
-                    })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    localStorage.setItem('ozderToken', data.token);
-                    localStorage.setItem('ozderRefreshToken', data.refreshToken);
-                    localStorage.setItem('ozderSession', JSON.stringify(data.user));
-                    return data.token;
-                }
-            } catch (e) {
-                console.warn("⚠️ Register failed, using fallback guest session:", e.message);
-                // Madde 109 Fix: Sunucuya ulaşılamazsa veya hata verirse uygulamayı kilitleme
-                return null;
-            }
-        }
-        return token;
+        // Hiçbir şey yok veya tutarsız — yeni misafir hesap aç
+        console.log("🔑 Yeni misafir oturum oluşturuluyor...");
+        const newToken = await createGuestAccount();
+        return newToken || token; // En son çare: eski token (boş olabilir)
     }
 
     // Sunucu adresi: Deployment'ta (Render/Railway) kendi adresini otomatik alır.
     const token = await ensureAuth();
-    if (window.io) {
-        globalSocket = io(srvUrl, { 
-            transports: ['websocket', 'polling'], 
-            reconnection: true,
-            auth: { token }
-        });
+        if (window.io) {
+            globalSocket = io(srvUrl, { 
+                transports: ['websocket', 'polling'], 
+                reconnection: true,
+                auth: { token } // Sunucu artik bu Token'i kontrol edecek
+            });
 
-        // Madde 25 & 103 Fix: Otomatik Oturum Yenileme & Bağlantı Kurtarma
+            // Otomatik Oturum Yenileme & Bağlantı Kurtarma — Sonsuz döngü olmayacak şekilde
+            let authRetryCount = 0;
             globalSocket.on('connect_error', async (err) => {
                 console.warn("⚠️ Soket bağlantı hatası:", err.message);
                 
                 // Eğer hata yetkilendirme kaynaklıysa (Token expired vb.)
                 if (err.message.includes("Authentication error")) {
-                    console.log("🔄 Token süresi dolmuş olabilir, yenileniyor...");
+                    if (authRetryCount >= 2) {
+                        console.error("❌ Auth retry limit aşıldı, misafir moda geçiliyor...");
+                        // Tüm tokenları temizle, yeni misafir hesap aç
+                        localStorage.removeItem('ozderToken');
+                        localStorage.removeItem('ozderRefreshToken');
+                        localStorage.removeItem('ozderSession');
+                        const newToken = await createGuestAccount();
+                        if (newToken) {
+                            globalSocket.auth.token = newToken;
+                            authRetryCount = 0;
+                            globalSocket.connect();
+                        }
+                        return;
+                    }
+                    authRetryCount++;
+                    console.log(`🔄 Token süresi dolmuş olabilir, yenileniyor... (deneme ${authRetryCount})`);
                     const newToken = await refreshSession();
                     
                     if (newToken) {
@@ -770,28 +799,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                         globalSocket.connect();
                         console.log("✅ Yeni token ile bağlantı onarıldı.");
                     } else {
-                        // Madde 111 Fix: Döngüyü kır, her şeyi temizle ve sessizce yeni oturum aç
-                        console.warn("❌ Oturum yenilenemedi, veriler temizlenip yeniden bağlanılıyor...");
-                        localStorage.clear(); // Tüm eski/bozuk tokenları temizle
-                        const freshToken = await ensureAuth();
-                        if (freshToken) {
-                            globalSocket.auth.token = freshToken;
+                        // Refresh fail olursa misafir hesaba düş
+                        const guestToken = await createGuestAccount();
+                        if (guestToken) {
+                            globalSocket.auth.token = guestToken;
                             globalSocket.connect();
-                        } else {
-                            // Madde 112 Fix: Infinite Reload Guard
-                            const reloadCount = parseInt(sessionStorage.getItem('ozderReloadCount') || '0');
-                            if (reloadCount < 3) {
-                                sessionStorage.setItem('ozderReloadCount', (reloadCount + 1).toString());
-                                console.warn(`🔄 Yeniden deneniyor... (${reloadCount + 1}/3)`);
-                                location.reload();
-                            } else {
-                                console.error("❌ Kritik Bağlantı Hatası: Lütfen internet bağlantınızı kontrol edin veya sayfayı manuel yenileyin.");
-                                alert("Sunucuya bağlanılamıyor. Lütfen internetinizi kontrol edip sayfayı manuel yenileyin.");
-                                sessionStorage.removeItem('ozderReloadCount');
-                            }
                         }
                     }
                 }
+            });
+
+            // Bağlantı başarılı olduğunda retry counter'ı sıfırla
+            globalSocket.on('connect', () => {
+                console.log("🟢 Sunucuya bağlandı:", globalSocket.id);
+                authRetryCount = 0;
             });
 
             // Initialize WebRTC Clients (Global & Ready to listen)
