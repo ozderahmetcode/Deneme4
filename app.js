@@ -1912,14 +1912,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Oda UI callback'lerini tanımla (RoomAudioClient'e geçirilecek)
             const onParticipants = (users) => {
+                // Oda ilk girişte gelen tam liste
                 window.activeRoomParticipants = users;
                 updateParticipantsUI();
             };
             const onUserJoined = (user) => {
-                // Already handled by RoomAudioClient inner listeners
+                // Yeni kullanıcı geldiğinde listeye ekle ve UI'ı güncelle
+                if (!window.activeRoomParticipants) window.activeRoomParticipants = [];
+                // Mükerrer eklemeyi engelle
+                const exists = window.activeRoomParticipants.some(u => u.id === user.id);
+                if (!exists) {
+                    window.activeRoomParticipants.push(user);
+                    updateParticipantsUI();
+                }
             };
             const onUserLeft = (data) => {
-                // Already handled by RoomAudioClient inner listeners
+                // Kullanıcı çıkınca listeden sil ve UI'ı güncelle
+                if (!window.activeRoomParticipants) return;
+                // Server hem `id` (socket id) hem `userId` gönderiyor; ikisinden biriyle eşleştir
+                window.activeRoomParticipants = window.activeRoomParticipants.filter(u => 
+                    u.id !== data.id && u.userId !== data.userId
+                );
+                updateParticipantsUI();
             };
 
             if (!noVoice) {
