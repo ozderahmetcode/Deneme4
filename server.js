@@ -37,7 +37,7 @@ const rateLimit = require('express-rate-limit');
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',') 
-    : (process.env.NODE_ENV === 'production' ? ['https://ozderahmetcode.github.io'] : ['*']); // Madde 18: Prod için varsayılan domain ekle
+    : (process.env.NODE_ENV === 'production' ? ['https://ozderahmetcode.github.io', 'https://deneme4-p5kx.onrender.com'] : ['*']); // Madde 112 Fix: Render domain eklendi
 
 const app = express();
 app.set('trust proxy', 1); // Render/Heroku arkasındaki gerçek IP'yi tanı (Madde 12)
@@ -53,7 +53,7 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
             imgSrc: ["'self'", "data:", "blob:", "https://api.dicebear.com", "https://assets.mixkit.co", "https://www.transparenttextures.com"], // Madde 108 Fix: UI dokuları eklendi
-            connectSrc: ["'self'", "wss:", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], 
+            connectSrc: ["'self'", "wss:", "https://deneme4-p5kx.onrender.com", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 112 Fix: Kendi domaini eklendi
             mediaSrc: ["'self'", "blob:", "data:", "https://assets.mixkit.co", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 108 Fix: Medya kaynakları eklendi
             frameAncestors: ["'none'"], 
             objectSrc: ["'none'"],

@@ -778,7 +778,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                             globalSocket.auth.token = freshToken;
                             globalSocket.connect();
                         } else {
-                            location.reload(); // En son çare olarak sayfayı tazele
+                            // Madde 112 Fix: Infinite Reload Guard
+                            const reloadCount = parseInt(sessionStorage.getItem('ozderReloadCount') || '0');
+                            if (reloadCount < 3) {
+                                sessionStorage.setItem('ozderReloadCount', (reloadCount + 1).toString());
+                                console.warn(`🔄 Yeniden deneniyor... (${reloadCount + 1}/3)`);
+                                location.reload();
+                            } else {
+                                console.error("❌ Kritik Bağlantı Hatası: Lütfen internet bağlantınızı kontrol edin veya sayfayı manuel yenileyin.");
+                                alert("Sunucuya bağlanılamıyor. Lütfen internetinizi kontrol edip sayfayı manuel yenileyin.");
+                                sessionStorage.removeItem('ozderReloadCount');
+                            }
                         }
                     }
                 }
