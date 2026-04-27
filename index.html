@@ -1349,11 +1349,41 @@
             <div class="user-card-header">
                 <div class="user-card-avatar-wrap">
                     <img id="v-user-avatar" src="" alt="">
-                    <div class="online-dot"></div>
+                    <div class="online-dot" id="v-user-online-dot"></div>
                 </div>
                 <h3 id="v-user-name">Kullanıcı Adı</h3>
                 <p id="v-user-tag">@premium_member</p>
+                <div id="v-user-bio" style="font-size:0.85rem; color:#bbb; text-align:center; margin-top:8px; padding:0 15px; min-height:20px; font-style:italic;"></div>
             </div>
+
+            <!-- Kişisel bilgiler grid (yaş / cinsiyet / bölge / boy / kilo / burç) -->
+            <div class="user-info-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; padding:12px 16px;">
+                <div class="info-cell" style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px; text-align:center;">
+                    <div style="font-size:0.65rem; color:#888; letter-spacing:1px;">YAŞ</div>
+                    <div id="v-user-age" style="font-size:1.05rem; font-weight:700; color:#fff;">-</div>
+                </div>
+                <div class="info-cell" style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px; text-align:center;">
+                    <div style="font-size:0.65rem; color:#888; letter-spacing:1px;">CİNSİYET</div>
+                    <div id="v-user-gender" style="font-size:0.95rem; font-weight:700; color:#fff;">-</div>
+                </div>
+                <div class="info-cell" style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px; text-align:center;">
+                    <div style="font-size:0.65rem; color:#888; letter-spacing:1px;">BÖLGE</div>
+                    <div id="v-user-region" style="font-size:0.95rem; font-weight:700; color:#fff;">-</div>
+                </div>
+                <div class="info-cell" style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px; text-align:center;">
+                    <div style="font-size:0.65rem; color:#888; letter-spacing:1px;">BOY</div>
+                    <div id="v-user-height" style="font-size:0.95rem; font-weight:700; color:#fff;">-</div>
+                </div>
+                <div class="info-cell" style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px; text-align:center;">
+                    <div style="font-size:0.65rem; color:#888; letter-spacing:1px;">KİLO</div>
+                    <div id="v-user-weight" style="font-size:0.95rem; font-weight:700; color:#fff;">-</div>
+                </div>
+                <div class="info-cell" style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px; text-align:center;">
+                    <div style="font-size:0.65rem; color:#888; letter-spacing:1px;">BURÇ</div>
+                    <div id="v-user-zodiac" style="font-size:0.95rem; font-weight:700; color:#fff;">-</div>
+                </div>
+            </div>
+
             <div class="user-card-stats">
                 <div class="u-stat">
                     <span class="u-label">GÜVEN SKORU</span>
@@ -1364,12 +1394,25 @@
                     <span class="u-value" id="v-user-level">LV 12</span>
                 </div>
             </div>
+
             <div class="user-card-actions">
                 <button class="primary-btn add-friend-btn" id="v-add-friend-btn" onclick="handleAddFriendAction()">
                     <i class="fa-solid fa-user-plus"></i> Arkadaş Ekle
                 </button>
                 <button class="secondary-btn" onclick="startDirectMessageFromModal()">
                     <i class="fa-solid fa-paper-plane"></i> Mesaj Gönder
+                </button>
+            </div>
+
+            <!-- Sustur ve Raporla butonları (ikincil aksiyonlar) -->
+            <div style="display:flex; gap:8px; padding:0 16px 16px 16px;">
+                <button id="v-mute-btn" onclick="handleMuteUser()"
+                    style="flex:1; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.04); color:#ddd; font-weight:600; cursor:pointer;">
+                    <i class="fa-solid fa-volume-xmark"></i> Sustur
+                </button>
+                <button onclick="handleReportUser()"
+                    style="flex:1; padding:10px; border-radius:10px; border:1px solid rgba(255, 80, 80, 0.4); background:rgba(255, 80, 80, 0.08); color:#ff8080; font-weight:600; cursor:pointer;">
+                    <i class="fa-solid fa-flag"></i> Raporla
                 </button>
             </div>
         </div>

@@ -36,10 +36,8 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
-    : '*'; // Production'da kendi origin'in ile çakışmaması için open default
-// NOT: Production'da güvenlik için Render dashboard'dan ALLOWED_ORIGINS env değişkenini ayarlayın
-// Örnek: ALLOWED_ORIGINS=https://deneme4-p5kx.onrender.com,https://senin-domain.com
+    ? process.env.ALLOWED_ORIGINS.split(',') 
+    : (process.env.NODE_ENV === 'production' ? ['https://ozderahmetcode.github.io'] : ['*']); // Madde 18: Prod için varsayılan domain ekle
 
 const app = express();
 app.set('trust proxy', 1); // Render/Heroku arkasındaki gerçek IP'yi tanı (Madde 12)
@@ -64,23 +62,7 @@ app.use(helmet({
     },
     frameguard: { action: "deny" } // Madde 24 Fix: Modern Helmet uyumluluğu
 }));
-// CORS — '*' iken credentials true olamaz, dinamik origin kullan
-app.use(cors({ 
-    origin: (origin, callback) => {
-        // origin yok (mobile app, curl, same-origin) → izin ver
-        if (!origin) return callback(null, true);
-        // Wildcard mode
-        if (ALLOWED_ORIGINS === '*' || (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes('*'))) {
-            return callback(null, true);
-        }
-        // Whitelist mode
-        if (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes(origin)) {
-            return callback(null, true);
-        }
-        callback(new Error('CORS reddedildi: ' + origin));
-    },
-    credentials: true 
-}));
+app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true })); // Sıkılaştırılmış CORS politikası
 
 // HTTP Rate Limit (Brute-force koruması)
 const limiter = rateLimit({
@@ -95,21 +77,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-const io = new Server(server, { 
-    cors: { 
-        origin: (origin, callback) => {
-            if (!origin) return callback(null, true);
-            if (ALLOWED_ORIGINS === '*' || (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes('*'))) {
-                return callback(null, true);
-            }
-            if (Array.isArray(ALLOWED_ORIGINS) && ALLOWED_ORIGINS.includes(origin)) {
-                return callback(null, true);
-            }
-            callback(new Error('Socket.io CORS reddedildi: ' + origin));
-        },
-        credentials: true
-    } 
-});
+const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -824,6 +792,96 @@ io.on('connection', (socket) => {
             }
         }
     });
+
+    // --- USER PROFILE PREVIEW (Profil Önizleme Modalı) ---
+    // İstemci bir kullanıcının avatarına tıkladığında çağrılır.
+    // socketId VEYA userId üzerinden hedef kullanıcı bulunur, public profil bilgileri döner.
+    socket.on('get_user_profile', async (data) => {
+        if (!checkRateLimit(socket)) return;
+        if (!data) return;
+
+        try {
+            let targetUserId = null;
+
+            // 1) Eğer userId verilmişse direkt kullan (UUID kontrol)
+            if (data.userId && isValidUUID(data.userId)) {
+                targetUserId = data.userId;
+            }
+            // 2) Yoksa socketId'den userId çöz (online kullanıcılar için)
+            else if (data.socketId) {
+                const targetSocket = io.sockets.sockets.get(data.socketId);
+                if (targetSocket && targetSocket.decoded) {
+                    targetUserId = targetSocket.decoded.id;
+                }
+            }
+
+            if (!targetUserId) {
+                socket.emit('user_profile_response', { success: false, error: 'Kullanıcı bulunamadı.' });
+                return;
+            }
+
+            const profile = await UserRepository.getUserProfile(targetUserId);
+            if (!profile) {
+                socket.emit('user_profile_response', { success: false, error: 'Profil bulunamadı.' });
+                return;
+            }
+
+            // Online durumu hesapla (socketId verilmişse)
+            const isOnline = data.socketId ? io.sockets.sockets.has(data.socketId) : false;
+
+            // İstemcinin daha sonra raporlama / arkadaş ekleme için kullanacağı socketId'yi de geri ver
+            socket.emit('user_profile_response', {
+                success: true,
+                profile: {
+                    userId: profile.id,
+                    socketId: data.socketId || null,
+                    username: sanitizeString(profile.username),
+                    avatarUrl: sanitizeString(profile.avatar_url || ''),
+                    bio: sanitizeString(profile.bio || ''),
+                    age: profile.age,
+                    gender: sanitizeString(profile.gender || ''),
+                    region: sanitizeString(profile.region || ''),
+                    zodiac: sanitizeString(profile.zodiac || ''),
+                    height: profile.height,
+                    weight: profile.weight,
+                    level: profile.level || 1,
+                    xp: profile.xp || 0,
+                    isVip: !!profile.is_vip,
+                    isOnline
+                }
+            });
+        } catch (e) {
+            console.error("get_user_profile error:", e);
+            socket.emit('user_profile_response', { success: false, error: 'Sunucu hatası.' });
+        }
+    });
+
+    // Kullanıcının kendi profilini güncellemesi (bio, boy, kilo, burç, avatar)
+    socket.on('update_my_profile', async (data) => {
+        if (!checkRateLimit(socket)) return;
+        if (!data) return;
+        const decodedUser = socket.decoded;
+        if (!decodedUser) return;
+
+        try {
+            await UserRepository.updateUserProfile(decodedUser.id, {
+                bio: data.bio,
+                height: data.height,
+                weight: data.weight,
+                zodiac: data.zodiac,
+                avatar_url: isValidUrl(data.avatarUrl) ? data.avatarUrl : undefined
+            });
+            // Yeni avatarı socket'e bağla (private_call_init vs. için)
+            if (isValidUrl(data.avatarUrl)) {
+                socket.currentAvatar = sanitizeString(data.avatarUrl);
+            }
+            socket.emit('profile_update_success', { msg: 'Profilin güncellendi.' });
+        } catch (e) {
+            console.error("update_my_profile error:", e);
+            socket.emit('profile_update_error', { msg: 'Profil güncellenemedi.' });
+        }
+    });
+
 
     // --- REPORTING SYSTEM (Madde 20) ---
     socket.on('submit_report', async (data) => {

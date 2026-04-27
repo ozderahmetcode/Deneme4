@@ -74,6 +74,10 @@ async function initDB() {
         // Madde 6: Match Preference Kolonu Ekle (Mevcut tabloları bozmadan güncelle)
         await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS match_preference VARCHAR(20) DEFAULT 'mixed';`);
 
+        // Profil ek bilgi kolonları (Kullanıcı önizleme modalı için)
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS height INT CHECK (height IS NULL OR (height >= 100 AND height <= 250));`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS weight INT CHECK (weight IS NULL OR (weight >= 30 AND weight <= 250));`);
+
         // Eşleşme geçmişi
         await client.query(`
             CREATE TABLE IF NOT EXISTS matches (
@@ -210,9 +214,9 @@ const UserRepository = {
                 avatar_url: ''
             };
         }
-        // Madde 25 & 81 Fix: Şema uyumlu kolon seçimi (gold -> gold_balance, reports_count silindi, zodiac eklendi)
+        // Madde 25 & 81 Fix: Şema uyumlu kolon seçimi (gold -> gold_balance, reports_count silindi)
         const res = await pool.query(
-            'SELECT id, username, avatar_url, gender, age, region, is_banned, match_preference, gold_balance, level, xp, is_vip, zodiac FROM users WHERE id = $1', 
+            'SELECT id, username, avatar_url, gender, age, region, is_banned, match_preference, gold_balance, level, xp, is_vip FROM users WHERE id = $1', 
             [userId]
         );
         return res.rows[0];
@@ -222,6 +226,60 @@ const UserRepository = {
         if (!isDBConnected) return null;
         const res = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
         return res.rows[0];
+    },
+
+    // Profil önizleme için PUBLIC alanlar (hassas veri yok: password_hash, is_banned, ban_reason, vs.)
+    async getUserProfile(userId) {
+        if (!isDBConnected) {
+            return { 
+                id: userId, username: 'MockUser', avatar_url: '', bio: 'Demo kullanıcı', 
+                age: 22, gender: 'belirtilmemiş', region: 'Türkiye', zodiac: '', 
+                height: null, weight: null, level: 1, xp: 0, is_vip: false 
+            };
+        }
+        const res = await pool.query(
+            `SELECT id, username, avatar_url, bio, age, gender, region, zodiac, 
+                    height, weight, level, xp, is_vip 
+             FROM users WHERE id = $1`,
+            [userId]
+        );
+        return res.rows[0];
+    },
+
+    // Kullanıcının kendi profilini güncellemesi (boy/kilo/bio)
+    async updateUserProfile(userId, profile) {
+        if (!isDBConnected) return;
+        // Sadece beyaz listede olan alanlar güncellenebilir
+        const allowed = {};
+        if (profile.bio !== undefined) allowed.bio = String(profile.bio).substring(0, 300);
+        if (profile.height !== undefined && profile.height !== null) {
+            const h = parseInt(profile.height, 10);
+            if (h >= 100 && h <= 250) allowed.height = h;
+        }
+        if (profile.weight !== undefined && profile.weight !== null) {
+            const w = parseInt(profile.weight, 10);
+            if (w >= 30 && w <= 250) allowed.weight = w;
+        }
+        if (profile.zodiac !== undefined) {
+            const z = String(profile.zodiac).substring(0, 20);
+            if (z.length > 0) allowed.zodiac = z;
+        }
+        if (profile.avatar_url !== undefined) {
+            const a = String(profile.avatar_url).substring(0, 500);
+            allowed.avatar_url = a;
+        }
+
+        const keys = Object.keys(allowed);
+        if (keys.length === 0) return;
+
+        const setClauses = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+        const values = keys.map(k => allowed[k]);
+        values.push(userId);
+
+        await pool.query(
+            `UPDATE users SET ${setClauses} WHERE id = $${values.length}`,
+            values
+        );
     },
 
     async recordMatch(user1Id, user2Id, durationSeconds = 0) {

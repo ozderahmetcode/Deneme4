@@ -813,6 +813,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             globalSocket.on('connect', () => {
                 console.log("🟢 Sunucuya bağlandı:", globalSocket.id);
                 authRetryCount = 0;
+                // Profil önizleme modalı için server yanıtlarını dinle
+                if (typeof window.bindUserProfileResponseListener === 'function') {
+                    window.bindUserProfileResponseListener();
+                }
             });
 
             // Initialize WebRTC Clients (Global & Ready to listen)
@@ -2413,52 +2417,163 @@ document.addEventListener('DOMContentLoaded', async () => {
         // --- FRIENDS SYSTEM LOGIC ---
         let previewUser = null;
 
+        // Susturulmuş kullanıcılar (yerel — sadece bu kullanıcı için ses kısılır)
+        window.mutedUsers = window.mutedUsers || new Set();
+
         window.openUserPreview = function(username, socketId, avatar) {
             if (username === currentUser.username) return; // Kendini önizleme
-            previewUser = { username, socketId, avatar };
-            
+            previewUser = { username, socketId, avatar, userId: null };
+
+            // İlk önce mevcut bilgilerle modal'ı aç (gecikme hissini azalt)
             document.getElementById('v-user-name').innerText = username;
-            document.getElementById('v-user-avatar').src = avatar;
-            document.getElementById('v-user-trust').innerText = `${75 + Math.floor(Math.random() * 25)}%`;
-            document.getElementById('v-user-level').innerText = `LV ${1 + Math.floor(Math.random() * 15)}`;
-            
+            document.getElementById('v-user-tag').innerText = '@' + username.toLowerCase();
+            document.getElementById('v-user-avatar').src = avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+            document.getElementById('v-user-bio').innerText = 'Bilgiler yükleniyor...';
+            ['v-user-age','v-user-gender','v-user-region','v-user-height','v-user-weight','v-user-zodiac'].forEach(id => {
+                const el = document.getElementById(id); if (el) el.innerText = '-';
+            });
+            document.getElementById('v-user-trust').innerText = '...';
+            document.getElementById('v-user-level').innerText = '...';
+
+            // Mute butonu durumu
+            const muteBtn = document.getElementById('v-mute-btn');
+            if (muteBtn) {
+                if (window.mutedUsers.has(socketId)) {
+                    muteBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i> Susturmayı Kaldır';
+                } else {
+                    muteBtn.innerHTML = '<i class="fa-solid fa-volume-xmark"></i> Sustur';
+                }
+            }
+
+            // Add friend button durumu
             const addBtn = document.getElementById('v-add-friend-btn');
             const isAlreadyFriend = currentUser.friends.some(f => f.username === username);
-            
             if (isAlreadyFriend) {
                 addBtn.innerHTML = '<i class="fa-solid fa-check"></i> Arkadaşsınız';
                 addBtn.disabled = true;
-                addBtn.style.opacity = "0.6";
+                addBtn.style.opacity = '0.6';
             } else {
                 addBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Arkadaş Ekle';
                 addBtn.disabled = false;
-                addBtn.style.opacity = "1";
+                addBtn.style.opacity = '1';
             }
-            
+
             openModal('view-user-modal');
+
+            // Server'dan canlı profil bilgilerini çek
+            if (globalSocket && globalSocket.connected) {
+                globalSocket.emit('get_user_profile', { socketId });
+            }
+        }
+
+        // Server'dan dönen profil yanıtı
+        // (Listener `if (window.io)` bloğu içinde değil çünkü globalSocket o sırada hazır olmayabilir;
+        // bu yüzden hazır olur olmaz bağlanması için aşağıda init fonksiyonu kullanılıyor.)
+        window.bindUserProfileResponseListener = function() {
+            if (!globalSocket) return;
+            if (window._profileListenerBound) return;
+            window._profileListenerBound = true;
+
+            globalSocket.on('user_profile_response', (data) => {
+                if (!data || !data.success || !data.profile) {
+                    document.getElementById('v-user-bio').innerText = data?.error || 'Profil yüklenemedi.';
+                    return;
+                }
+                const p = data.profile;
+                // previewUser'ı UUID ile zenginleştir (arkadaşlık isteği bunu kullanacak)
+                if (previewUser) previewUser.userId = p.userId;
+
+                document.getElementById('v-user-name').innerText = p.username || '?';
+                document.getElementById('v-user-tag').innerText = '@' + (p.username || '').toLowerCase();
+                if (p.avatarUrl) document.getElementById('v-user-avatar').src = p.avatarUrl;
+                document.getElementById('v-user-bio').innerText = p.bio && p.bio.length > 0 ? p.bio : 'Henüz bio eklenmemiş.';
+                document.getElementById('v-user-age').innerText = p.age ? p.age : '-';
+                document.getElementById('v-user-gender').innerText = p.gender || '-';
+                document.getElementById('v-user-region').innerText = p.region || '-';
+                document.getElementById('v-user-height').innerText = p.height ? p.height + ' cm' : '-';
+                document.getElementById('v-user-weight').innerText = p.weight ? p.weight + ' kg' : '-';
+                document.getElementById('v-user-zodiac').innerText = p.zodiac || '-';
+                document.getElementById('v-user-level').innerText = 'LV ' + (p.level || 1);
+                // Trust skoru: Şimdilik level + 70 (yer tutucu, gerçek bir metrik gelene kadar)
+                document.getElementById('v-user-trust').innerText = Math.min(99, 70 + (p.level || 1) * 2) + '%';
+
+                const dot = document.getElementById('v-user-online-dot');
+                if (dot) dot.style.background = p.isOnline ? '#1dd1a1' : '#666';
+            });
+
+            // Sunucu yanıtları (rapor / arkadaşlık)
+            globalSocket.on('report_success', (d) => alert('✅ ' + (d?.msg || 'Rapor iletildi')));
+            globalSocket.on('report_error', (d) => alert('⚠️ ' + (d?.msg || 'Rapor gönderilemedi')));
+            globalSocket.on('friend_error', (d) => alert('⚠️ ' + (d?.msg || 'Arkadaşlık isteği gönderilemedi')));
+            globalSocket.on('friend_success', (d) => alert('✅ ' + (d?.msg || 'Arkadaşlık başarılı')));
+            globalSocket.on('friend_info', (d) => alert(d?.msg || ''));
         }
 
         window.handleAddFriendAction = function() {
             if (!previewUser) return;
             const isAlreadyFriend = currentUser.friends.some(f => f.username === previewUser.username);
-            if (!isAlreadyFriend) {
-                currentUser.friends.push({
-                    username: previewUser.username,
-                    avatar: previewUser.avatar,
-                    trust: document.getElementById('v-user-trust').innerText
-                });
-                localStorage.setItem('' + currentUser.username + '_friends', JSON.stringify(currentUser.friends));
-                alert(previewUser.username + ' arkadaş listene eklendi!');
-                closeModal('view-user-modal');
-                renderFriendsList();
+            if (isAlreadyFriend) return;
+            if (!previewUser.socketId) {
+                alert('Bu kullanıcı şu anda çevrimdışı, arkadaşlık isteği gönderilemiyor.');
+                return;
             }
+            // Server'a istek at — server hem kalıcı DB kaydı yapacak hem de karşı tarafa bildirim gönderecek
+            globalSocket.emit('friend_request', { targetId: previewUser.socketId });
+            // Yerel listeye iyimser ekleme — server reddederse (örn. zaten istek atılmış) etki yok
+            currentUser.friends.push({
+                username: previewUser.username,
+                avatarUrl: previewUser.avatar,
+                trust: document.getElementById('v-user-trust').innerText
+            });
+            try { localStorage.setItem(currentUser.username + '_friends', JSON.stringify(currentUser.friends)); } catch(e) {}
+            alert('🤝 Arkadaşlık isteği ' + previewUser.username + ' kullanıcısına iletildi.');
+            closeModal('view-user-modal');
+            if (typeof renderFriendsList === 'function') renderFriendsList();
+        }
+
+        // Yerel olarak bir kullanıcının sesini kıs / aç
+        window.handleMuteUser = function() {
+            if (!previewUser || !previewUser.socketId) return;
+            const sid = previewUser.socketId;
+            const audioEl = document.getElementById('audio-' + sid);
+
+            if (window.mutedUsers.has(sid)) {
+                window.mutedUsers.delete(sid);
+                if (audioEl) audioEl.muted = false;
+                document.getElementById('v-mute-btn').innerHTML = '<i class="fa-solid fa-volume-xmark"></i> Sustur';
+                alert(previewUser.username + ' artık duyuluyor.');
+            } else {
+                window.mutedUsers.add(sid);
+                if (audioEl) audioEl.muted = true;
+                document.getElementById('v-mute-btn').innerHTML = '<i class="fa-solid fa-volume-high"></i> Susturmayı Kaldır';
+                alert(previewUser.username + ' susturuldu (sadece sen duymuyorsun).');
+            }
+        }
+
+        // Sunucuya rapor gönder
+        window.handleReportUser = function() {
+            if (!previewUser) return;
+            if (!previewUser.userId) {
+                alert('Kullanıcı bilgileri henüz yüklenmedi, biraz bekleyip tekrar dene.');
+                return;
+            }
+            const reason = prompt('Bu kullanıcıyı neden raporluyorsun? (Kısaca yaz)');
+            if (!reason || reason.trim().length < 3) {
+                alert('Rapor için en az 3 karakterlik bir gerekçe yaz.');
+                return;
+            }
+            globalSocket.emit('submit_report', {
+                reportedId: previewUser.userId,
+                reason: reason.trim().substring(0, 500)
+            });
+            closeModal('view-user-modal');
         }
 
         window.removeFriend = function(username) {
             if (confirm(username + ' arkadaş listenden silinsin mi?')) {
                 currentUser.friends = currentUser.friends.filter(f => f.username !== username);
-                localStorage.setItem('' + currentUser.username + '_friends', JSON.stringify(currentUser.friends));
-                renderFriendsList();
+                try { localStorage.setItem(currentUser.username + '_friends', JSON.stringify(currentUser.friends)); } catch(e) {}
+                if (typeof renderFriendsList === 'function') renderFriendsList();
             }
         }
 
