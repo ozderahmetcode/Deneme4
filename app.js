@@ -749,16 +749,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Sunucu adresi: Deployment'ta (Render/Railway) kendi adresini otomatik alır.
     const token = await ensureAuth();
-        if (window.io) {
-            globalSocket = io(srvUrl, { 
-                transports: ['websocket', 'polling'], 
-                reconnection: true,
-                auth: { token } // Sunucu artik bu Token'i kontrol edecek
-            });
+    if (window.io) {
+        globalSocket = io(srvUrl, { 
+            transports: ['websocket', 'polling'], 
+            reconnection: true,
+            auth: { token }
+        });
 
-            });
-
-            // Madde 25 & 103 Fix: Otomatik Oturum Yenileme & Bağlantı Kurtarma
+        // Madde 25 & 103 Fix: Otomatik Oturum Yenileme & Bağlantı Kurtarma
             globalSocket.on('connect_error', async (err) => {
                 console.warn("⚠️ Soket bağlantı hatası:", err.message);
                 
