@@ -766,15 +766,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const newToken = await refreshSession();
                     
                     if (newToken) {
-                        // Yeni token ile tekrar bağlanmayı dene
                         globalSocket.auth.token = newToken;
                         globalSocket.connect();
                         console.log("✅ Yeni token ile bağlantı onarıldı.");
                     } else {
-                        // Refresh de başarısızsa (Oturum tamamen bitti)
-                        console.error("❌ Oturum yenilenemedi, login ekranına yönlendiriliyor.");
-                        alert("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
-                        location.reload(); // Guest moduna düşür veya login'e at
+                        // Madde 111 Fix: Döngüyü kır, her şeyi temizle ve sessizce yeni oturum aç
+                        console.warn("❌ Oturum yenilenemedi, veriler temizlenip yeniden bağlanılıyor...");
+                        localStorage.clear(); // Tüm eski/bozuk tokenları temizle
+                        const freshToken = await ensureAuth();
+                        if (freshToken) {
+                            globalSocket.auth.token = freshToken;
+                            globalSocket.connect();
+                        } else {
+                            location.reload(); // En son çare olarak sayfayı tazele
+                        }
                     }
                 }
             });
