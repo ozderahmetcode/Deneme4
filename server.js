@@ -14,6 +14,7 @@ console.log("🟢 Sunucu başlatma hazırlığı yapılıyor...");
 
 const express = require('express');
 const http = require('http');
+const path = require('path'); // Madde 105 Fix: Path modülü eklendi
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -83,7 +84,8 @@ if (!JWT_SECRET) {
     process.exit(1);
 }
 
-app.use(express.static('./'));
+// Madde 105 Fix: Render/Linux uyumlu statik dosya sunumu
+app.use(express.static(path.join(__dirname, '.')));
 app.use(express.json());
 
 // ==================== HEALTH CHECK (Render.com uyumlu) ====================
