@@ -704,7 +704,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function createGuestAccount() {
         const array = new Uint8Array(16);
         window.crypto.getRandomValues(array);
-        const guestPassword = Array.from(array, b => b.toString(16).padStart(2, '0')).join('') + 'A1!';
+        const guestPassword = Array.from(array, b => b.toString(16).padStart(2, '0')).join('') + 'Aa1';
         const guestName = `User_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
         
         try {
@@ -2856,5 +2856,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     initApp();
-    initPTTListeners();
+    // initPTTListeners() iç scope'ta line 1746'da setTimeout ile zaten çağrılıyor; burada tekrar çağırmak ReferenceError veriyordu
 });
