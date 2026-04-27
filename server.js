@@ -14,7 +14,7 @@ console.log("🟢 Sunucu başlatma hazırlığı yapılıyor...");
 
 const express = require('express');
 const http = require('http');
-const path = require('path'); // Madde 105 Fix: Path modülü eklendi
+const pathModule = require('path'); // Madde 106 Fix: Çakışmayı önlemek için pathModule olarak değiştirildi
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -84,8 +84,8 @@ if (!JWT_SECRET) {
     process.exit(1);
 }
 
-// Madde 105 Fix: Render/Linux uyumlu statik dosya sunumu
-app.use(express.static(path.join(__dirname, '.')));
+// Madde 105 & 106 Fix: Render/Linux uyumlu statik dosya sunumu (Namespace Isolation)
+app.use(express.static(pathModule.join(__dirname, '.')));
 app.use(express.json());
 
 // ==================== HEALTH CHECK (Render.com uyumlu) ====================
