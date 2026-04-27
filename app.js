@@ -389,6 +389,11 @@ function safeParseJSON(key, fallback) {
 
 let usersDB = safeParseJSON('ozderUsers', {});
 let currentUser = safeParseJSON('ozderSession', null);
+// Eski session'larda friends array eksik olabilir — burada kalıcı şekilde init et
+if (currentUser && !Array.isArray(currentUser.friends)) {
+    currentUser.friends = [];
+    try { localStorage.setItem('ozderSession', JSON.stringify(currentUser)); } catch(e) {}
+}
 let liteMode = safeParseJSON('ozderLiteMode', false);
 let stats = (currentUser && currentUser.username) ? safeParseJSON(currentUser.username + '_stats', { totalCalls: 0, talkTimeSeconds: 0, likes: 0, dislikes: 0, skips: 0, reports: 0, callsDone: 0 }) : null;
 let statsChart = null;
@@ -723,7 +728,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (data.success) {
                 localStorage.setItem('ozderToken', data.token);
                 localStorage.setItem('ozderRefreshToken', data.refreshToken);
-                localStorage.setItem('ozderSession', JSON.stringify(data.user));
+                // Defansif: Server friends array'ini göndermiyor — burada init et ki openUserPreview crash etmesin
+                const userWithDefaults = Object.assign({ friends: [] }, data.user);
+                localStorage.setItem('ozderSession', JSON.stringify(userWithDefaults));
                 // Şifreyi de sakla ki kullanıcı sonra DB'den login olabilsin
                 localStorage.setItem('ozderGuestPwd', guestPassword);
                 return data.token;
@@ -2422,6 +2429,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         window.openUserPreview = function(username, socketId, avatar) {
             if (username === currentUser.username) return; // Kendini önizleme
+            // Defansif: friends array'i undefined olabilir (eski session, server response, vs.)
+            if (!currentUser.friends) currentUser.friends = [];
             previewUser = { username, socketId, avatar, userId: null };
 
             // İlk önce mevcut bilgilerle modal'ı aç (gecikme hissini azalt)
@@ -2511,6 +2520,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         window.handleAddFriendAction = function() {
             if (!previewUser) return;
+            if (!currentUser.friends) currentUser.friends = [];
             const isAlreadyFriend = currentUser.friends.some(f => f.username === previewUser.username);
             if (isAlreadyFriend) return;
             if (!previewUser.socketId) {
