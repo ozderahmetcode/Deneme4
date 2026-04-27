@@ -914,20 +914,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
 
-        roomClient = new RoomAudioClient(globalSocket, document.getElementById('audio-container'), {
-            onParticipants: (users) => {
-                window.activeRoomParticipants = users;
-                updateParticipantsUI();
-            },
-            onUserJoined: (user) => {
-                // webrtc_client.js handle's the signal, we just update UI
-                updateParticipantsUI();
-            },
-            onUserLeft: (data) => {
-                // webrtc_client.js handle's the removal, we update UI
-                updateParticipantsUI();
-            }
-        });
+        // NOT: roomClient burada oluşturulmuyor — joinRoom() ilk odaya girildiğinde oluşturur.
+        // Eskiden burada bir instance vardı, ama o instance'ın listener'ları joinRoom'daki yeni instance'la
+        // çakışıyordu (her socket event 2 kez tetikleniyordu, glare/double-offer oluşuyordu).
 
         // Oda Mesajlarını Al
         globalSocket.on('receive_room_message', (data) => {

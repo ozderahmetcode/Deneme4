@@ -267,13 +267,33 @@ class RoomAudioClient {
             const { senderId, sdp } = data;
             console.log(`📥 Oda Cevabı (Answer) geldi: ${senderId}`);
             const pc = this.peers[senderId];
-            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            if (!pc) return;
+            // Defansif: Peer zaten stable durumdaysa duplicate answer'ı atla (race condition koruması)
+            if (pc.signalingState === 'stable') {
+                console.warn(`⚠️ Peer ${senderId} zaten stable, duplicate answer atlandı.`);
+                return;
+            }
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            } catch (e) {
+                console.warn(`⚠️ setRemoteDescription answer atlandı (${senderId}): ${e.message}`);
+            }
         };
 
         this._boundListeners.onIce = async (data) => {
             const { senderId, candidate } = data;
             const pc = this.peers[senderId];
-            if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            if (!pc || !candidate) return;
+            // Defansif: remote description set edilmediyse ICE'i kuyruklamaktan kaçın, crash etme
+            if (!pc.remoteDescription) {
+                console.warn(`⚠️ ICE candidate atlandı, remote description henüz yok (${senderId})`);
+                return;
+            }
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+                console.warn(`⚠️ addIceCandidate atlandı (${senderId}): ${e.message}`);
+            }
         };
 
         this.socket.on('room_participants', this._boundListeners.onParticipants);
@@ -285,6 +305,17 @@ class RoomAudioClient {
     }
 
     async _initiateCall(targetId) {
+        // Defansif: Aynı peer için zaten devam eden bir negotiation varsa atla (Glare koruması)
+        const existing = this.peers[targetId];
+        if (existing && existing.signalingState !== 'stable' && existing.signalingState !== 'closed') {
+            console.warn(`⚠️ Zaten devam eden negotiation var: ${targetId} (${existing.signalingState}), yeni offer atlandı`);
+            return;
+        }
+        if (existing && existing.signalingState === 'stable') {
+            // Zaten bağlanmış, gerek yok
+            console.log(`ℹ️ Peer ${targetId} zaten bağlı`);
+            return;
+        }
         const pc = this._createPeer(targetId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
