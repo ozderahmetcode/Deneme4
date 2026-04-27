@@ -41,12 +41,17 @@ function setupSignaling(io) {
             });
 
             // --- ROOM WEBRTC SIGNALING (Madde 11: Common Room Check) ---
+            // Fix: Oda ID'leri 'room_' prefix'i ile başlamıyor (vip_elmas, gece_kuslari, genel_sohbet vs.)
+            // Socket.io her socket'in kendi socket.id adlı odasını otomatik ekler — bu hariç tut
             const checkCommonRoom = (targetId) => {
                 const targetSocket = io.sockets.sockets.get(targetId);
                 if (!targetSocket) return false;
-                // Her iki socket'in ortak bir odada (room_*) olup olmadığını kontrol et
-                const myRooms = Array.from(socket.rooms).filter(r => r.startsWith('room_'));
-                return myRooms.some(r => targetSocket.rooms.has(r));
+                // Kendi socket.id'sini hariç tutarak ortak oda var mı bak
+                for (const r of socket.rooms) {
+                    if (r === socket.id) continue; // socket'in kendi default odası
+                    if (targetSocket.rooms.has(r)) return true;
+                }
+                return false;
             };
 
             socket.on("room_webrtc_offer", (p) => {
