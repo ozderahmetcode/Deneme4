@@ -49,12 +49,13 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.socket.io", "https://cdn.jsdelivr.net"],
+            scriptSrcAttr: ["'unsafe-inline'"], // Madde 108 Fix: Satır içi (onclick) JS'e izin ver
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
-            imgSrc: ["'self'", "data:", "https://api.dicebear.com", "https://assets.mixkit.co"],
-            connectSrc: ["'self'", "wss:", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 14 & 15 Fix: https: wildcard kaldırıldı
-            mediaSrc: ["'self'", "blob:", "data:", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 10 & 25 Fix: data: geri eklendi (DM Audio Uyumluluğu)
-            frameAncestors: ["'none'"], // Madde 17: Clickjacking Koruması
+            imgSrc: ["'self'", "data:", "blob:", "https://api.dicebear.com", "https://assets.mixkit.co", "https://www.transparenttextures.com"], // Madde 108 Fix: UI dokuları eklendi
+            connectSrc: ["'self'", "wss:", "https://cdn.socket.io", "https://*.streamtheworld.com", "https://*.musicradio.com"], 
+            mediaSrc: ["'self'", "blob:", "data:", "https://assets.mixkit.co", "https://*.streamtheworld.com", "https://*.musicradio.com"], // Madde 108 Fix: Medya kaynakları eklendi
+            frameAncestors: ["'none'"], 
             objectSrc: ["'none'"],
             upgradeInsecureRequests: [],
         },
