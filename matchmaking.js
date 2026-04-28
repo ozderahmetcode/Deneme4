@@ -136,15 +136,21 @@ class MatchmakingEngine {
             const unknownGenders = ['belirtilmemiş', 'belirtilmemis', 'unknown', ''];
             const eitherUnknown = unknownGenders.includes(aGender) || unknownGenders.includes(bGender);
 
+            // KRİTİK: Eğer biri bile 'mixed' ise cinsiyete bakma
             const genderOk = eitherUnknown
                 || (currentUser.preference === 'mixed' || potentialMatch.preference === 'mixed')
                 || (aGender !== bGender);
 
-            // Filtre 2: Bölge Uyumu (Opsiyonel)
+            // Filtre 2: Bölge Uyumu
             let regionOk = true;
-            if (currentUser.regionFilter || potentialMatch.regionFilter) {
-                regionOk = (currentUser.region === potentialMatch.region);
+            // KRİTİK: Eğer biri bile 'mixed' ise bölgeye bakma (filtreyi pas geç)
+            if (currentUser.preference !== 'mixed' && potentialMatch.preference !== 'mixed') {
+                if (currentUser.regionFilter || potentialMatch.regionFilter) {
+                    regionOk = (currentUser.region === potentialMatch.region);
+                }
             }
+
+            console.log(`🔍 [Check] ${currentUser.socketId} vs ${potentialMatch.socketId} -> GenderOK: ${genderOk}, RegionOK: ${regionOk} (Prefs: ${currentUser.preference}/${potentialMatch.preference})`);
 
             if (genderOk && regionOk) {
                 const matchedUser = potentialMatch;
@@ -158,11 +164,8 @@ class MatchmakingEngine {
                     user1: currentUser,
                     user2: matchedUser
                 };
-            } else {
-                console.log(`❌ [Match-Skip] ${potentialMatch.socketId} elendi. Sebepler: GenderOK=${genderOk}, RegionOK=${regionOk} (Genders: ${aGender} vs ${bGender}, Prefs: ${currentUser.preference} vs ${potentialMatch.preference})`);
             }
         }
-
         return null;
     }
 
