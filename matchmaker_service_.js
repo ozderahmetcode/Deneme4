@@ -41,7 +41,7 @@ const MatchmakerService = {
             socketId: socket.id,
             userId: user.id,
             username: dbUser ? dbUser.username : user.username,
-            gender: dbUser ? dbUser.gender : 'unknown',
+            gender: (dbUser && dbUser.gender !== 'belirtilmemiş') ? dbUser.gender : (gender || 'unknown'),
             region: dbUser ? dbUser.region : 'Global',
             // Madde 6 Fix: Veritabanındaki kalıcı tercihi kullan (Eğer istemci boş gönderirse)
             preference: data.preference || (dbUser ? dbUser.match_preference : 'mixed'), 
