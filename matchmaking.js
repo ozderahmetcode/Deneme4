@@ -100,6 +100,7 @@ class MatchmakingEngine {
             // Kendisiyle eşleşemez
             if (potentialMatch.socketId === currentUser.socketId) continue;
 
+            // Filtre 1: Cinsiyet Uyumu
             const aGender = (currentUser.gender || '').toLowerCase();
             const bGender = (potentialMatch.gender || '').toLowerCase();
             const unknownGenders = ['belirtilmemiş', 'belirtilmemis', 'unknown', ''];
@@ -109,26 +110,27 @@ class MatchmakingEngine {
                 || (currentUser.preference === 'mixed' || potentialMatch.preference === 'mixed')
                 || (aGender !== bGender);
 
+            // Filtre 2: Bölge Uyumu (Opsiyonel)
             let regionOk = true;
-            if (currentUser.regionFilter && potentialMatch.regionFilter) {
+            if (currentUser.regionFilter || potentialMatch.regionFilter) {
                 regionOk = (currentUser.region === potentialMatch.region);
             }
 
             if (genderOk && regionOk) {
-                matchedUser = potentialMatch;
-                break;
-            }
-        }
+                const matchedUser = potentialMatch;
+                console.log(`✅ [Match-Success] ${currentUser.socketId} <-> ${matchedUser.socketId} eşleşti!`);
 
-        if (matchedUser) {
-            await this.removeFromQueue(currentUser.socketId);
-            await this.removeFromQueue(matchedUser.socketId);
-            
-            console.log(`✅ [Match] Eşleşme sağlandı: ${currentUser.socketId} <-> ${matchedUser.socketId}`);
-            return {
-                user1: currentUser,
-                user2: matchedUser
-            };
+                // Havuzdan ikisini de çıkar
+                await this.removeFromQueue(currentUser.socketId);
+                await this.removeFromQueue(matchedUser.socketId);
+
+                return {
+                    user1: currentUser,
+                    user2: matchedUser
+                };
+            } else {
+                console.log(`❌ [Match-Skip] ${potentialMatch.socketId} elendi. Sebepler: GenderOK=${genderOk}, RegionOK=${regionOk} (Genders: ${aGender} vs ${bGender}, Prefs: ${currentUser.preference} vs ${potentialMatch.preference})`);
+            }
         }
 
         return null;

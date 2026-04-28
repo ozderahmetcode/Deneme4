@@ -610,21 +610,21 @@ io.on('connection', (socket) => {
         const result = await MatchmakerService.handleFindMatch(socket, data, sanitizeString);
         
         if (result && result.matched) {
-            // Güvenlik: Sinyalleşme yetkilendirmesi için eşleşme kaydı
             const opponentSocketId = result.targetSocketId;
             socket.matchedPeerId = opponentSocketId;
 
-            // Eğer karşı taraf bu sunucudaysa (local), onun state'ini de güncelle
             const opponentSocket = io.sockets.sockets.get(opponentSocketId);
             if (opponentSocket) {
+                console.log(`📡 [Local] Karşı taraf bu sunucuda bulundu: ${opponentSocketId}`);
                 opponentSocket.matchedPeerId = socket.id;
+            } else {
+                console.log(`🌐 [Remote] Karşı taraf bu sunucuda değil (başka instance'da olabilir): ${opponentSocketId}`);
             }
 
-            // User2'ye io.to() ile bildir (Redis Adapter sayesinde diğer sunucudaysa da gider)
             io.to(opponentSocketId).emit('match_found', result.payload);
-            console.log(`🎉 EŞLEŞME! ${socket.id} <-> ${opponentSocketId}`);
+            console.log(`🎉 [Match] ${socket.id} <-> ${opponentSocketId} eşleşmesi yayınlandı.`);
         } else {
-            console.log('🛌 Kuyruğa alındı:', socket.id);
+            console.log('🛌 [Queue] Havuzda beklemeye devam ediyor:', socket.id);
         }
     });
 
