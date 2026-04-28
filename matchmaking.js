@@ -8,14 +8,33 @@ const Redis = require('ioredis');
 class MatchmakingEngine {
     constructor() {
         this.waitingPool = []; // Fallback in-memory pool
-        const redisUrl = process.env.UPSTASH_REDIS_URL;
-        this.redis = redisUrl ? new Redis(redisUrl) : null;
+        this.redis = null;
         this.QUEUE_KEY = 'ozder:matchmaking_queue';
-        
+    }
+
+    /**
+     * Dışarıdan (server.js) ana Redis bağlantısını enjekte et
+     */
+    setRedisClient(client) {
+        this.redis = client;
         if (this.redis) {
-            console.log('🔗 Matchmaking Engine Redis modunda çalışıyor.');
-            this.redis.on('error', (err) => console.error('🔴 Matchmaking Redis Hatası:', err.message));
+            console.log('🔗 Matchmaking Engine: Ana Redis bağlantısı paylaşıldı.');
         }
+    }
+
+    /**
+     * Redis komutlarını zaman aşımı ile çalıştıran yardımcı fonksiyon
+     */
+    async redisCall(command, ...args) {
+        if (!this.redis) return null;
+        
+        return Promise.race([
+            this.redis[command](...args),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 2500))
+        ]).catch(err => {
+            console.error(`🔴 Redis Komut Hatası (${command}):`, err.message);
+            return null; // Hata durumunda null dön ki fallback devreye girsin
+        });
     }
 
     /**
@@ -39,9 +58,15 @@ class MatchmakingEngine {
         };
 
         if (this.redis) {
-            await this.redis.hset(this.QUEUE_KEY, userData.socketId, JSON.stringify(entry));
-            const size = await this.redis.hlen(this.QUEUE_KEY);
-            console.log(`📥 [Redis-Havuz] Kullanıcı eklendi. Güncel havuz boyutu: ${size}`);
+            const success = await this.redisCall('hset', this.QUEUE_KEY, userData.socketId, JSON.stringify(entry));
+            if (success !== null) {
+                const size = await this.redisCall('hlen', this.QUEUE_KEY);
+                console.log(`📥 [Redis-Havuz] Kullanıcı eklendi. Güncel havuz boyutu: ${size || '?'}`);
+            } else {
+                // Redis hatası/timeout durumunda memory fallback
+                this.waitingPool.push(entry);
+                console.log(`📥 [Fallback-Memory] Redis geciktiği için memory'ye eklendi: ${userData.socketId}`);
+            }
         } else {
             this.waitingPool.push(entry);
             console.log(`📥 [Memory-Havuz] Kullanıcı eklendi. Güncel havuz boyutu: ${this.waitingPool.length}`);
@@ -55,10 +80,10 @@ class MatchmakingEngine {
      */
     async removeFromQueue(socketId) {
         if (this.redis) {
-            await this.redis.hdel(this.QUEUE_KEY, socketId);
-        } else {
-            this.waitingPool = this.waitingPool.filter(u => u.socketId !== socketId);
+            await this.redisCall('hdel', this.QUEUE_KEY, socketId);
         }
+        // Her zaman memory'den de temizle
+        this.waitingPool = this.waitingPool.filter(u => u.socketId !== socketId);
     }
 
     /**
@@ -68,25 +93,30 @@ class MatchmakingEngine {
         let pool = [];
         if (this.redis) {
             try {
-                const rawPool = await this.redis.hgetall(this.QUEUE_KEY);
-                for (let key in rawPool) {
-                    try {
-                        pool.push(JSON.parse(rawPool[key]));
-                    } catch (e) {
-                        console.error(`🔴 Redis kuyruk parse hatası (Key: ${key}):`, e.message);
-                        await this.redis.hdel(this.QUEUE_KEY, key); // Bozuk veriyi temizle
+                const rawPool = await this.redisCall('hgetall', this.QUEUE_KEY);
+                if (rawPool) {
+                    for (let key in rawPool) {
+                        try {
+                            pool.push(JSON.parse(rawPool[key]));
+                        } catch (e) {
+                            console.error(`🔴 Redis kuyruk parse hatası (Key: ${key}):`, e.message);
+                            await this.redisCall('hdel', this.QUEUE_KEY, key);
+                        }
                     }
+                } else {
+                    pool = this.waitingPool; // Redis timeout/hata durumunda memory'ye bak
                 }
+                
                 // Sort by timestamp to match oldest first
                 pool.sort((a, b) => a.timestamp - b.timestamp);
-                console.log(`🧐 [Redis-Match] Havuz tarandı (${pool.length} kullanıcı). Eşleşme aranıyor...`);
+                console.log(`🧐 [Match-Logic] Havuz tarandı (${pool.length} kullanıcı).`);
             } catch (err) {
-                console.error("🔴 Redis hgetall hatası:", err.message);
-                pool = this.waitingPool; // Hata durumunda RAM'e dön
+                console.error("🔴 Matchmaking Error:", err.message);
+                pool = this.waitingPool;
             }
         } else {
             pool = this.waitingPool;
-            console.log(`🧐 [Memory-Match] Havuz tarandı (${pool.length} kullanıcı). Eşleşme aranıyor...`);
+            console.log(`🧐 [Memory-Match] Havuz tarandı (${pool.length} kullanıcı).`);
         }
 
         if (pool.length < 2) return null;

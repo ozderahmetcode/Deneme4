@@ -31,6 +31,9 @@ if (redisUrl) {
     pubClient = redisClient.duplicate();
     subClient = redisClient.duplicate();
     
+    // Matchmaking Engine'in aynı bağlantıyı kullanmasını sağla
+    MatchmakingEngine.setRedisClient(redisClient);
+
     redisClient.on('connect', () => console.log('🟢 Upstash Redis Bağlantısı Başarılı'));
     redisClient.on('error', (err) => console.error('🔴 Redis Hatası (Main):', err.message));
     pubClient.on('error', (err) => console.error('🔴 Redis Hatası (Pub):', err.message));
@@ -42,6 +45,7 @@ if (redisUrl) {
 // --- Modül İmportları ---
 const setupSignaling = require('./signaling');
 const MatchmakerService = require('./matchmaker_service_');
+const MatchmakingEngine = require('./matchmaking'); // Doğrudan erişim için
 const { initDB, UserRepository } = require('./database');
 
 // --- GLOBAL STATE & SECURITY MAPS ---
