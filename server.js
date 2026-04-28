@@ -19,6 +19,26 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
+// Redis & Upstash Integration
+const Redis = require('ioredis');
+const { createAdapter } = require('@socket.io/redis-adapter');
+
+const redisUrl = process.env.UPSTASH_REDIS_URL;
+let redisClient = null, pubClient = null, subClient = null;
+
+if (redisUrl) {
+    redisClient = new Redis(redisUrl);
+    pubClient = redisClient.duplicate();
+    subClient = redisClient.duplicate();
+    
+    redisClient.on('connect', () => console.log('🟢 Upstash Redis Bağlantısı Başarılı'));
+    redisClient.on('error', (err) => console.error('🔴 Redis Hatası (Main):', err.message));
+    pubClient.on('error', (err) => console.error('🔴 Redis Hatası (Pub):', err.message));
+    subClient.on('error', (err) => console.error('🔴 Redis Hatası (Sub):', err.message));
+} else {
+    console.warn('⚠️ UPSTASH_REDIS_URL bulunamadı. Uygulama In-Memory modda çalışacak (Scale edilemez).');
+}
+
 // --- Modül İmportları ---
 const setupSignaling = require('./signaling');
 const MatchmakerService = require('./matchmaker_service_');
@@ -78,6 +98,11 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS } });
+
+if (pubClient && subClient) {
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('🔗 Socket.io Redis Adapter Aktif (Multi-Server Desteği)');
+}
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {

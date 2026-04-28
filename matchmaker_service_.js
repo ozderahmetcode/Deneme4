@@ -33,7 +33,7 @@ const MatchmakerService = {
         const isVIP = userGold >= 500;
 
         // 2. Havuzuna Ekle (Manipülasyona kapalı veri seti)
-        const matchResult = MatchmakingEngine.addToQueue({
+        const matchResult = await MatchmakingEngine.addToQueue({
             socketId: socket.id,
             userId: user.id,
             username: dbUser ? dbUser.username : user.username,
@@ -93,7 +93,7 @@ const MatchmakerService = {
      * Bağlantı kesildiğinde havuzdan temizle
      */
     handleDisconnect(socketId) {
-        MatchmakingEngine.removeFromQueue(socketId);
+        MatchmakingEngine.removeFromQueue(socketId).catch(e => console.error("Redis remove error:", e));
     }
 };
 
