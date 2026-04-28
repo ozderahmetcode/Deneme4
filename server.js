@@ -611,15 +611,18 @@ io.on('connection', (socket) => {
         
         if (result && result.matched) {
             // Güvenlik: Sinyalleşme yetkilendirmesi için eşleşme kaydı
-            const opponentSocket = io.sockets.sockets.get(result.targetSocketId);
+            const opponentSocketId = result.targetSocketId;
+            socket.matchedPeerId = opponentSocketId;
+
+            // Eğer karşı taraf bu sunucudaysa (local), onun state'ini de güncelle
+            const opponentSocket = io.sockets.sockets.get(opponentSocketId);
             if (opponentSocket) {
-                socket.matchedPeerId = result.targetSocketId;
                 opponentSocket.matchedPeerId = socket.id;
-                
-                // User2'ye bildir
-                opponentSocket.emit('match_found', result.payload);
-                console.log(`🎉 EŞLEŞME! ${socket.id} <-> ${result.targetSocketId}`);
             }
+
+            // User2'ye io.to() ile bildir (Redis Adapter sayesinde diğer sunucudaysa da gider)
+            io.to(opponentSocketId).emit('match_found', result.payload);
+            console.log(`🎉 EŞLEŞME! ${socket.id} <-> ${opponentSocketId}`);
         } else {
             console.log('🛌 Kuyruğa alındı:', socket.id);
         }

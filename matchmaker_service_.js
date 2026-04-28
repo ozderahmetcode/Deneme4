@@ -18,7 +18,11 @@ const MatchmakerService = {
     async handleFindMatch(socket, data, sanitizeString) {
         // Artik veriler istemciden (data) degil, Token'dan (socket.decoded) geliyor.
         const user = socket.decoded;
-        console.log(`🔍 [Service] Eşleşme aranıyor... (Kullanıcı maskelendi)`);
+        if (!user) {
+            console.warn(`🚨 [Service] Eşleşme hatası: Token verisi bulunamadı! Socket: ${socket.id}`);
+            return { matched: false, error: 'Auth required' };
+        }
+        console.log(`🔍 [Service] Eşleşme aranıyor: ${user.username} (${socket.id})`);
 
         // 1. VIP/Kredi Kontrolü (Sunucu Taraflı - Veritabanı Doğrulaması)
         // Madde 9 Fix: Token verisi eski olabilir, taze veriyi DB'den çekiyoruz

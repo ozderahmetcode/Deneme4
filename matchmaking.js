@@ -40,11 +40,13 @@ class MatchmakingEngine {
 
         if (this.redis) {
             await this.redis.hset(this.QUEUE_KEY, userData.socketId, JSON.stringify(entry));
+            const size = await this.redis.hlen(this.QUEUE_KEY);
+            console.log(`📥 [Redis-Havuz] Kullanıcı eklendi. Güncel havuz boyutu: ${size}`);
         } else {
             this.waitingPool.push(entry);
+            console.log(`📥 [Memory-Havuz] Kullanıcı eklendi. Güncel havuz boyutu: ${this.waitingPool.length}`);
         }
         
-        console.log(`📥 [Havuz] Bir kullanıcı eklendi: ${userData.socketId}`);
         return await this.tryMatch(entry);
     }
 
@@ -65,14 +67,26 @@ class MatchmakingEngine {
     async tryMatch(currentUser) {
         let pool = [];
         if (this.redis) {
-            const rawPool = await this.redis.hgetall(this.QUEUE_KEY);
-            for (let key in rawPool) {
-                pool.push(JSON.parse(rawPool[key]));
+            try {
+                const rawPool = await this.redis.hgetall(this.QUEUE_KEY);
+                for (let key in rawPool) {
+                    try {
+                        pool.push(JSON.parse(rawPool[key]));
+                    } catch (e) {
+                        console.error(`🔴 Redis kuyruk parse hatası (Key: ${key}):`, e.message);
+                        await this.redis.hdel(this.QUEUE_KEY, key); // Bozuk veriyi temizle
+                    }
+                }
+                // Sort by timestamp to match oldest first
+                pool.sort((a, b) => a.timestamp - b.timestamp);
+                console.log(`🧐 [Redis-Match] Havuz tarandı (${pool.length} kullanıcı). Eşleşme aranıyor...`);
+            } catch (err) {
+                console.error("🔴 Redis hgetall hatası:", err.message);
+                pool = this.waitingPool; // Hata durumunda RAM'e dön
             }
-            // Sort by timestamp to match oldest first
-            pool.sort((a, b) => a.timestamp - b.timestamp);
         } else {
             pool = this.waitingPool;
+            console.log(`🧐 [Memory-Match] Havuz tarandı (${pool.length} kullanıcı). Eşleşme aranıyor...`);
         }
 
         if (pool.length < 2) return null;
