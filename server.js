@@ -600,6 +600,16 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Eşleşme aramasını iptal et — kullanıcı "ana menüye dön" derse havuzdan çıkar
+    socket.on('cancel_match', () => {
+        try {
+            MatchmakerService.handleDisconnect(socket.id);
+            console.log('🚫 Eşleşme iptal edildi:', socket.id);
+        } catch (e) {
+            console.error('cancel_match error:', e.message);
+        }
+    });
+
     // --- GAME MATCHMAKING ---
     socket.on('find_game_match', (data) => {
         if (!checkRateLimit(socket)) return;

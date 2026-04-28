@@ -67,9 +67,17 @@ class MatchmakingEngine {
             if (potentialMatch.socketId === currentUser.socketId) continue;
 
             // 1. Cinsiyet Filtresi
-            const genderOk = (currentUser.preference === 'mixed' || potentialMatch.preference === 'mixed') || 
-                             (currentUser.gender !== potentialMatch.gender);
-            
+            // Bilinmeyen cinsiyetler ('belirtilmemiş', 'unknown', boş) için filtre atlanır —
+            // aksi halde yeni misafirler hep aynı default cinsiyetle eşleşemez.
+            const aGender = (currentUser.gender || '').toLowerCase();
+            const bGender = (potentialMatch.gender || '').toLowerCase();
+            const unknownGenders = ['belirtilmemiş', 'belirtilmemis', 'unknown', ''];
+            const eitherUnknown = unknownGenders.includes(aGender) || unknownGenders.includes(bGender);
+
+            const genderOk = eitherUnknown
+                || (currentUser.preference === 'mixed' || potentialMatch.preference === 'mixed')
+                || (aGender !== bGender);
+
             // 2. Bölge Filtresi (Eğer her iki taraf da aktif ettiyse veya özellikle arıyorsa)
             let regionOk = true;
             if (currentUser.regionFilter && potentialMatch.regionFilter) {

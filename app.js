@@ -1138,6 +1138,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             lastMatchData = data;
             clearTimeout(matchingInterval);
             if (window.busyTimeout) clearTimeout(window.busyTimeout);
+            // Eşleşme bulundu — iptal butonu artık gerekmiyor
+            const _cBtn = document.getElementById('cancel-matching-btn');
+            if (_cBtn) _cBtn.style.display = 'none';
 
             // Arama sesini durdur
             const ringing = document.getElementById('dial-ringing');
@@ -1328,6 +1331,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showOverlay(document.getElementById('matching-screen'));
                 document.getElementById('match-status-text').innerText = "Sinyal Aranıyor...";
                 document.getElementById('connect-countdown').classList.add('hidden');
+                // Yeni arama başladığında iptal butonunu gizle (10 sn sonra busy mesajıyla görünecek)
+                const _cancelBtn = document.getElementById('cancel-matching-btn');
+                if (_cancelBtn) _cancelBtn.style.display = 'none';
 
                 // Arayana kadar avatar, isim ve butonları gizle
                 document.getElementById('match-avatar').parentElement.style.display = 'none';
@@ -1357,6 +1363,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (el && el.innerText.includes("Aranıyor")) {
                         el.innerText = "Kullanıcılar meşgul, aranıyor...";
                     }
+                    // Meşgul mesajı çıktığında iptal butonunu göster ki kullanıcı ana menüye dönebilsin
+                    const cancelBtn = document.getElementById('cancel-matching-btn');
+                    if (cancelBtn) cancelBtn.style.display = 'inline-block';
                 }, 10000);
 
                 clearInterval(matchingInterval);
@@ -2975,6 +2984,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.skipRating = function() {
         showTab('home-screen');
     };
+
+    // Eşleşme aranıyorken iptal et ve ana menüye dön
+    window.cancelMatching = function() {
+        try {
+            // 1) Sunucuya kuyruktan çıkma bildirimi
+            if (globalSocket && globalSocket.connected) {
+                globalSocket.emit('cancel_match');
+            }
+            // 2) Bekleyen meşgul timer'ını ve matching interval'ını durdur
+            if (window.busyTimeout) { clearTimeout(window.busyTimeout); window.busyTimeout = null; }
+            if (typeof matchingInterval !== 'undefined' && matchingInterval) {
+                clearTimeout(matchingInterval); clearInterval(matchingInterval); matchingInterval = null;
+            }
+            // 3) Çalan ses varsa durdur
+            const ringing = document.getElementById('dial-ringing');
+            if (ringing) { try { ringing.pause(); ringing.currentTime = 0; } catch(e) {} }
+            // 4) Mikrofon stream'ini bırak (matching ekranında alınmıştı)
+            if (webrtcClient && typeof webrtcClient.releaseMicrophone === 'function') {
+                try { webrtcClient.releaseMicrophone(); } catch(e) {}
+            }
+            // 5) UI'ı sıfırla
+            const statusEl = document.getElementById('match-status-text');
+            if (statusEl) statusEl.innerText = 'Sinyal Aranıyor...';
+            const cancelBtn = document.getElementById('cancel-matching-btn');
+            if (cancelBtn) cancelBtn.style.display = 'none';
+            const cd = document.getElementById('connect-countdown');
+            if (cd) { cd.classList.add('hidden'); cd.innerText = '5'; }
+            // 6) Ana ekrana dön
+            hideOverlays();
+            showTab('home-screen');
+        } catch (e) {
+            console.error('cancelMatching error:', e);
+            // Yine de ana menüye götür
+            try { hideOverlays(); showTab('home-screen'); } catch(_) {}
+        }
+    };
+
     window.addFriendInCall = function() {
         if (!lastMatchData || !webrtcClient || !webrtcClient.targetId) return;
         globalSocket.emit('friend_request', { 
