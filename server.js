@@ -26,6 +26,12 @@ const { createAdapter } = require('@socket.io/redis-adapter');
 const redisUrl = process.env.UPSTASH_REDIS_URL;
 let redisClient = null, pubClient = null, subClient = null;
 
+// --- Modül İmportları ---
+const MatchmakingEngine = require('./matchmaking'); 
+const MatchmakerService = require('./matchmaker_service_');
+const setupSignaling = require('./signaling');
+const { initDB, UserRepository } = require('./database');
+
 if (redisUrl) {
     redisClient = new Redis(redisUrl);
     pubClient = redisClient.duplicate();
@@ -41,12 +47,6 @@ if (redisUrl) {
 } else {
     console.warn('⚠️ UPSTASH_REDIS_URL bulunamadı. Uygulama In-Memory modda çalışacak (Scale edilemez).');
 }
-
-// --- Modül İmportları ---
-const setupSignaling = require('./signaling');
-const MatchmakerService = require('./matchmaker_service_');
-const MatchmakingEngine = require('./matchmaking'); // Doğrudan erişim için
-const { initDB, UserRepository } = require('./database');
 
 // --- GLOBAL STATE & SECURITY MAPS ---
 const rateLimitMap = new Map(); // Madde 16: clientIp -> { count, resetTime }
